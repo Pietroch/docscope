@@ -1,0 +1,44 @@
+# api/pyproject.toml
+
+[project]
+name = "docscope"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.115.6",
+    "uvicorn[standard]==0.34.0",
+    "sqlalchemy==2.0.36",
+    "psycopg[binary]==3.2.3",
+    "python-dotenv==1.0.1",
+    "pdfplumber==0.11.4",
+    "openpyxl==3.1.5",
+    "pandas==2.2.3",
+    "python-multipart==0.0.20",
+    "pymupdf==1.24.14",
+    "pytesseract==0.3.13",
+    "pillow==12.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.4",
+    "httpx==0.28.1",
+    "ruff==0.8.4",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["docscope"]

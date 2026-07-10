@@ -1,0 +1,71 @@
+# docker-compose.yml
+
+name: docscope
+
+services:
+
+  db:
+    image: postgres:16-alpine
+    container_name: docscope_db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - docscope_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  api:
+    build: ./api
+    container_name: docscope_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    command: uvicorn docscope.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./api/src:/app/src
+      - ./tests:/app/tests
+      - ${DOCUMENTS_DIR}:/data/documents:ro
+    env_file:
+      - .env
+    networks:
+      - docscope_network
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  client:
+    build: ./client
+    container_name: docscope_client
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    volumes:
+      - ./client/src:/usr/share/nginx/html
+    networks:
+      - docscope_network
+
+volumes:
+  db_data:
+    name: docscope_db_data
+
+networks:
+  docscope_network:
+    name: docscope_network
+    driver: bridge

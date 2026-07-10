@@ -1,0 +1,110 @@
+<!-- client/src/index.html -->
+
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <title>docscope</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 1200px;
+            margin: 2rem auto;
+        }
+
+        .layout {
+            display: flex;
+            gap: 2rem;
+            align-items: flex-start;
+        }
+
+        pre {
+            flex: 1;
+            white-space: pre-wrap;
+            border: 1px solid #ccc;
+            padding: 1rem;
+            margin: 0;
+        }
+
+        table {
+            flex: 1;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            border: 1px solid #ccc;
+            padding: 0.5rem;
+            text-align: left;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>docscope - extraction PDF</h1>
+    <input type="file" id="pdf-input" accept="application/pdf">
+
+    <div class="layout">
+        <pre id="result"></pre>
+        <table id="champs">
+            <thead>
+                <tr>
+                    <th>Intitulé</th>
+                    <th>Valeur</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        const input = document.getElementById("pdf-input");
+        const result = document.getElementById("result");
+        const champsBody = document.querySelector("#champs tbody");
+
+        input.addEventListener("change", async () => {
+            const file = input.files[0];
+            if (!file) return;
+
+            result.textContent = "Extraction en cours...";
+            champsBody.innerHTML = "";
+
+            const formData = new FormData();
+            formData.append("file", file);
+
+            const response = await fetch("http://localhost:8000/extract", {
+                method: "POST",
+                body: formData,
+            });
+
+            const data = await response.json();
+            result.textContent = data.text;
+
+            const ajouterLigne = (intitule, valeur) => {
+                const row = document.createElement("tr");
+
+                const tdIntitule = document.createElement("td");
+                tdIntitule.textContent = intitule;
+
+                const tdValeur = document.createElement("td");
+                tdValeur.textContent = valeur ?? "";
+
+                row.append(tdIntitule, tdValeur);
+                champsBody.appendChild(row);
+            };
+
+            for (const champ of data.champs) {
+                ajouterLigne(champ.intitule, champ.valeur);
+            }
+            for (const cellule of data.tableau) {
+                ajouterLigne(`${cellule.ligne} — ${cellule.colonne}`, cellule.valeur);
+            }
+            for (const champ of data.synthese) {
+                ajouterLigne(`Synthèse — ${champ.intitule}`, champ.valeur);
+            }
+        });
+    </script>
+</body>
+
+</html>

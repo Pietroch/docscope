@@ -1,0 +1,8 @@
+# client/.dockerignore
+
+.git
+.env
+*.md
+docs/
+node_modules/
+.devcontainer/
