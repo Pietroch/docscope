@@ -1,0 +1,163 @@
+<!-- client/src/documents/list.html -->
+
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <title>docscope — documents</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 1000px;
+            margin: 2rem auto;
+        }
+
+        .filters {
+            display: flex;
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            border: 1px solid #ccc;
+            padding: 0.5rem;
+            text-align: left;
+        }
+
+        th {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        tbody tr {
+            cursor: pointer;
+        }
+
+        tbody tr:hover {
+            background: #f5f5f5;
+        }
+    </style>
+</head>
+
+<body>
+    <a href="../index.html">&larr; Accueil</a>
+    <h1>docscope — documents</h1>
+
+    <div class="filters">
+        <select id="filter-year"></select>
+        <select id="filter-company"></select>
+        <select id="filter-type"></select>
+        <select id="filter-person"></select>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th data-field="name">Nom de fichier</th>
+                <th data-field="person">Personne</th>
+                <th data-field="company">Entreprise</th>
+                <th data-field="type">Type</th>
+                <th data-field="template">Modèle</th>
+                <th data-field="date">Date</th>
+            </tr>
+        </thead>
+        <tbody id="documents-body"></tbody>
+    </table>
+
+    <script>
+        const filterYear = document.getElementById("filter-year");
+        const filterCompany = document.getElementById("filter-company");
+        const filterType = document.getElementById("filter-type");
+        const filterPerson = document.getElementById("filter-person");
+        const documentsBody = document.getElementById("documents-body");
+
+        let documents = [];
+        let sortField = "date";
+        let sortAsc = false;
+
+        const yearOf = (doc) => doc.date.slice(0, 4);
+
+        // "Tous" (empty value) always comes first, values are otherwise sorted.
+        const fillFilter = (select, values) => {
+            const previous = select.value;
+            select.innerHTML = '<option value="">Tous</option>' +
+                [...new Set(values)].sort().map((v) => `<option value="${v}">${v}</option>`).join("");
+            select.value = previous;
+        };
+
+        const refreshFilters = () => {
+            fillFilter(filterYear, documents.map(yearOf));
+            fillFilter(filterCompany, documents.map((d) => d.company));
+            fillFilter(filterType, documents.map((d) => d.type));
+            fillFilter(filterPerson, documents.map((d) => d.person));
+        };
+
+        const render = () => {
+            const filters = {
+                year: filterYear.value,
+                company: filterCompany.value,
+                type: filterType.value,
+                person: filterPerson.value,
+            };
+
+            const rows = documents
+                .filter((d) =>
+                    (!filters.year || yearOf(d) === filters.year) &&
+                    (!filters.company || d.company === filters.company) &&
+                    (!filters.type || d.type === filters.type) &&
+                    (!filters.person || d.person === filters.person)
+                )
+                .sort((a, b) => {
+                    const cmp = String(a[sortField]).localeCompare(String(b[sortField]));
+                    return sortAsc ? cmp : -cmp;
+                });
+
+            documentsBody.innerHTML = "";
+            for (const doc of rows) {
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                    <td>${doc.name}</td>
+                    <td>${doc.person}</td>
+                    <td>${doc.company}</td>
+                    <td>${doc.type}</td>
+                    <td>${doc.template}</td>
+                    <td>${doc.date}</td>
+                `;
+                row.addEventListener("click", () => {
+                    location.href = `detail.html?id=${doc.id}`;
+                });
+                documentsBody.appendChild(row);
+            }
+        };
+
+        for (const select of [filterYear, filterCompany, filterType, filterPerson]) {
+            select.addEventListener("change", render);
+        }
+
+        for (const th of document.querySelectorAll("th[data-field]")) {
+            th.addEventListener("click", () => {
+                const field = th.dataset.field;
+                sortAsc = sortField === field ? !sortAsc : true;
+                sortField = field;
+                render();
+            });
+        }
+
+        fetch("http://localhost:8000/documents")
+            .then((response) => response.json())
+            .then((data) => {
+                documents = data.documents;
+                refreshFilters();
+                render();
+            });
+    </script>
+</body>
+
+</html>

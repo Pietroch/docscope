@@ -1,6 +1,6 @@
-# api/src/docscope/services/models/model_1.py
+# api/src/docscope/services/models/ucm.py
 #
-# Field extraction rules for "Model 1": a Belgian payslip PDF (bulletin de
+# Field extraction rules for "UCM": a Belgian payslip PDF (bulletin de
 # paie). The layout has real columns (employer block, worker block,
 # earnings table) but PDF text extraction flattens everything into plain
 # lines with no coordinates. Every rule here is a regex anchored on a known
@@ -16,7 +16,7 @@ import unicodedata
 
 
 def extract_fields(text: str) -> list[tuple[str, str | None]]:
-    """Extract the fixed set of key/value fields from a Model 1 payslip."""
+    """Extract the fixed set of key/value fields from a UCM payslip."""
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     joined = "\n".join(lines)
 

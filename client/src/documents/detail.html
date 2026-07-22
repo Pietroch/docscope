@@ -1,0 +1,241 @@
+<!-- client/src/documents/detail.html -->
+
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <title>docscope — document</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 700px;
+            margin: 2rem auto;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        th,
+        td {
+            border: 1px solid #ccc;
+            padding: 0.5rem;
+            text-align: left;
+        }
+
+        th {
+            width: 12rem;
+        }
+
+        #champs {
+            margin-top: 1.5rem;
+        }
+
+        #champs td.editable {
+            cursor: pointer;
+        }
+
+        #champs input {
+            width: 100%;
+            box-sizing: border-box;
+            font: inherit;
+        }
+
+        .vue-toggle {
+            margin-top: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 2.5rem;
+            height: 1.4rem;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .switch .slider {
+            position: absolute;
+            inset: 0;
+            background: #ccc;
+            border-radius: 1.4rem;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .switch .slider::before {
+            content: "";
+            position: absolute;
+            width: 1.1rem;
+            height: 1.1rem;
+            left: 0.15rem;
+            bottom: 0.15rem;
+            background: white;
+            border-radius: 50%;
+            transition: 0.2s;
+        }
+
+        .switch input:checked+.slider {
+            background: #666;
+        }
+
+        .switch input:checked+.slider::before {
+            transform: translateX(1.1rem);
+        }
+    </style>
+</head>
+
+<body>
+    <a href="list.html">&larr; Liste des documents</a>
+    <h1>docscope — document</h1>
+
+    <table id="document"></table>
+
+    <div class="vue-toggle">
+        <label class="switch">
+            <input type="checkbox" id="vue-graphique-toggle">
+            <span class="slider"></span>
+        </label>
+        <span>Vue graphique</span>
+    </div>
+
+    <table id="champs">
+        <thead>
+            <tr>
+                <th>Intitulé</th>
+                <th>Valeur</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <!-- TODO: vue graphique des champs, pas encore développée -->
+    <div id="champs-graphique" hidden>
+        <p>Vue graphique à venir.</p>
+    </div>
+
+    <script>
+        const documentId = new URLSearchParams(location.search).get("id");
+        const table = document.getElementById("document");
+        const champsTable = document.getElementById("champs");
+        const champsBody = document.querySelector("#champs tbody");
+        const champsGraphique = document.getElementById("champs-graphique");
+        const vueToggle = document.getElementById("vue-graphique-toggle");
+
+        vueToggle.addEventListener("change", () => {
+            champsTable.hidden = vueToggle.checked;
+            champsGraphique.hidden = !vueToggle.checked;
+        });
+
+        // Click a cell (intitulé or valeur) to edit it in place; Entrée
+        // saves (PATCH with the full field), Échap or blur without change
+        // cancels back to plain text.
+        const rendreEditable = (td, field, key) => {
+            td.className = "editable";
+            td.textContent = field[key] ?? "";
+
+            td.addEventListener("click", () => {
+                if (td.querySelector("input")) return;
+
+                const previous = field[key] ?? "";
+                const input = document.createElement("input");
+                input.type = "text";
+                input.value = previous;
+                td.textContent = "";
+                td.appendChild(input);
+                input.focus();
+
+                const save = async () => {
+                    const newValue = input.value;
+                    if (newValue === previous) {
+                        td.textContent = previous;
+                        return;
+                    }
+                    const label = key === "label" ? newValue : field.label;
+                    const value = key === "value" ? newValue : field.value;
+                    const response = await fetch(
+                        `http://localhost:8000/documents/${documentId}/fields/${field.id}`,
+                        {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ label, value }),
+                        }
+                    );
+                    const data = await response.json();
+                    if (!response.ok) {
+                        td.textContent = previous;
+                        alert(data.detail);
+                        return;
+                    }
+                    field.label = data.label;
+                    field.value = data.value;
+                    td.textContent = data[key] ?? "";
+                };
+
+                input.addEventListener("blur", save);
+                input.addEventListener("keydown", (e) => {
+                    if (e.key === "Enter") input.blur();
+                    if (e.key === "Escape") {
+                        input.removeEventListener("blur", save);
+                        td.textContent = previous;
+                    }
+                });
+            });
+        };
+
+        const ajouterLigneChamp = (field) => {
+            const row = document.createElement("tr");
+            const tdIntitule = document.createElement("td");
+            const tdValeur = document.createElement("td");
+
+            rendreEditable(tdIntitule, field, "label");
+            rendreEditable(tdValeur, field, "value");
+
+            row.append(tdIntitule, tdValeur);
+            champsBody.appendChild(row);
+        };
+
+        // Raw columns from the `documents` table - no extracted fields yet.
+        const LIBELLES = {
+            name: "Nom de fichier",
+            person: "Personne",
+            company: "Entreprise",
+            type: "Type",
+            template: "Modèle",
+            date: "Date",
+        };
+
+        fetch(`http://localhost:8000/documents/${documentId}`)
+            .then(async (response) => {
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail);
+                return data;
+            })
+            .then((doc) => {
+                for (const [champ, libelle] of Object.entries(LIBELLES)) {
+                    const row = document.createElement("tr");
+                    row.innerHTML = `<th>${libelle}</th><td>${doc[champ]}</td>`;
+                    table.appendChild(row);
+                }
+
+                // Extracted fields (document_field) - editable in place.
+                for (const field of doc.fields) {
+                    ajouterLigneChamp(field);
+                }
+            })
+            .catch((err) => {
+                table.outerHTML = `<p>${err.message}</p>`;
+            });
+    </script>
+</body>
+
+</html>

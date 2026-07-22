@@ -5,15 +5,17 @@
 ## Purpose
 
 Store, index and analyze documents: extract text from PDFs, persist the extracted
-data (never the source files) in PostgreSQL, and generate Excel reports.
+data (never the source files) in SQLite, and generate Excel reports.
 
 ## Services
 
 | Service | Role | Tech | Port |
 |---|---|---|---|
-| `db` | Database | PostgreSQL 16 | 5432 |
 | `api` | REST API | FastAPI (package `docscope`) | 8000 |
 | `client` | Static frontend | HTML/JS served by nginx | 3000 |
+
+SQLite is a file, not a service: the database lives at `DB_PATH`, in
+`./api/data` bind-mounted into `api` only.
 
 `client` has no `depends_on` on `api`: it compiles/serves independently, CORS is
 configured on the `api` side.
@@ -27,7 +29,7 @@ folder is bind-mounted **read-only** into the `api` container at
 - Documents are **never** copied into application storage (no named volume,
   no object storage).
 - Only the data extracted from them — text, metadata, analysis results — is
-  persisted in PostgreSQL.
+  persisted in SQLite.
 
 ## Data flow
 
@@ -35,7 +37,7 @@ folder is bind-mounted **read-only** into the `api` container at
 external drive (read-only) --> api (pdfplumber: text extraction)
                                  |
                                  v
-                            PostgreSQL (extracted data)
+                         SQLite (extracted data)
                                  |
                                  v
                     api (openpyxl: report generation) --> Excel export

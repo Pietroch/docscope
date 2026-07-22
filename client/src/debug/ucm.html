@@ -1,0 +1,163 @@
+<!-- client/src/debug/ucm.html -->
+
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <title>docscope — debug UCM</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 1200px;
+            margin: 2rem auto;
+        }
+
+        .layout {
+            display: flex;
+            gap: 2rem;
+            align-items: flex-start;
+        }
+
+        pre {
+            flex: 1;
+            white-space: pre-wrap;
+            border: 1px solid #ccc;
+            padding: 1rem;
+            margin: 0;
+        }
+
+        table {
+            flex: 1;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            border: 1px solid #ccc;
+            padding: 0.5rem;
+            text-align: left;
+        }
+
+        tr.champ-vide td {
+            color: #b00;
+        }
+    </style>
+</head>
+
+<body>
+    <a href="../index.html">&larr; Accueil</a>
+    <h1>docscope — debug extraction UCM</h1>
+    <p>
+        Un fichier à la fois : texte OCR brut et détail des champs, pour vérifier
+        la qualité d'extraction sur ce modèle de document. Le flux normal
+        (plusieurs fichiers) est sur <a href="../payslip.html">la page bulletin de paye</a>.
+    </p>
+    <input type="file" id="pdf-input" accept="application/pdf">
+    <button id="save-button" disabled>Enregistrer le document</button>
+    <p id="save-status"></p>
+
+    <div class="layout">
+        <pre id="result"></pre>
+        <table id="champs">
+            <thead>
+                <tr>
+                    <th>Intitulé</th>
+                    <th>Valeur</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        const input = document.getElementById("pdf-input");
+        const result = document.getElementById("result");
+        const champsBody = document.querySelector("#champs tbody");
+        const saveButton = document.getElementById("save-button");
+        const saveStatus = document.getElementById("save-status");
+
+        // Rows currently shown in the Intitulé/Valeur table, saved as-is
+        // when the document is saved.
+        let fields = [];
+
+        input.addEventListener("change", async () => {
+            const file = input.files[0];
+            if (!file) return;
+
+            saveButton.disabled = true;
+            saveStatus.textContent = "";
+
+            result.textContent = "Extraction en cours...";
+            champsBody.innerHTML = "";
+            fields = [];
+
+            const formData = new FormData();
+            formData.append("file", file);
+
+            const response = await fetch("http://localhost:8000/extract", {
+                method: "POST",
+                body: formData,
+            });
+
+            const data = await response.json();
+            result.textContent = data.text;
+
+            const ajouterLigne = (intitule, valeur) => {
+                fields.push({ label: intitule, value: valeur ?? null });
+
+                const row = document.createElement("tr");
+                // No value = failed match (bad label/OCR), not a real
+                // extraction - flagged as an error, not left silently blank.
+                if (!valeur) row.classList.add("champ-vide");
+
+                const tdIntitule = document.createElement("td");
+                tdIntitule.textContent = intitule;
+
+                const tdValeur = document.createElement("td");
+                tdValeur.textContent = valeur ?? "(vide)";
+
+                row.append(tdIntitule, tdValeur);
+                champsBody.appendChild(row);
+            };
+
+            for (const champ of data.champs) {
+                ajouterLigne(champ.intitule, champ.valeur);
+            }
+            for (const cellule of data.tableau) {
+                ajouterLigne(`${cellule.ligne} — ${cellule.colonne}`, cellule.valeur);
+            }
+            for (const champ of data.synthese) {
+                ajouterLigne(`Synthèse — ${champ.intitule}`, champ.valeur);
+            }
+
+            const valides = fields.filter((f) => f.value).length;
+            saveStatus.textContent = `${valides}/${fields.length} champs valides`;
+
+            saveButton.disabled = false;
+        });
+
+        saveButton.addEventListener("click", async () => {
+            const file = input.files[0];
+            if (!file) return;
+
+            saveStatus.textContent = "Enregistrement en cours...";
+
+            const response = await fetch("http://localhost:8000/documents", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ template: "ucm", documents: [{ name: file.name, fields }] }),
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                saveStatus.textContent = data.detail;
+                return;
+            }
+            saveStatus.textContent = `Document enregistré (id ${data.ids[0]}).`;
+            saveButton.disabled = true;
+        });
+    </script>
+</body>
+
+</html>

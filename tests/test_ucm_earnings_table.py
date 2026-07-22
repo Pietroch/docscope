@@ -1,4 +1,4 @@
-# tests/test_model_1_earnings_table.py
+# tests/test_ucm_earnings_table.py
 #
 # Checks extract_earnings_table() (flattened-text approach, no coordinates)
 # cell by cell against ground truth. The text reproduces the real layout:
@@ -6,7 +6,7 @@
 # detached "-" sign on the next line for "ONSS travailleur", "Net à payer"
 # value on the next line.
 
-from docscope.services.models import model_1
+from docscope.services.models import ucm
 
 SOURCE_TEXT = """
 Rémunérations - avantages et retenues
@@ -97,7 +97,7 @@ def _group_by_code(table_lines):
 
 
 def test_extract_earnings_table():
-    table_lines, _ = model_1.extract_earnings_table(SOURCE_TEXT)
+    table_lines, _ = ucm.extract_earnings_table(SOURCE_TEXT)
 
     order, by_code = _group_by_code(table_lines)
     columns = ["Libellé", "Jours", "Heures", "Unités", "Ind.", "Montant EUR"]
@@ -123,7 +123,7 @@ def test_extract_earnings_table():
 
 
 def test_extract_earnings_summary():
-    _, summary_lines = model_1.extract_earnings_table(SOURCE_TEXT)
+    _, summary_lines = ucm.extract_earnings_table(SOURCE_TEXT)
 
     actual = {label: value for _, label, value in summary_lines}
 

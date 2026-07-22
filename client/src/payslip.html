@@ -1,0 +1,135 @@
+<!-- client/src/payslip.html -->
+
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <title>docscope</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 700px;
+            margin: 2rem auto;
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        li {
+            padding: 0.4rem 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        li.error {
+            color: #b00;
+        }
+    </style>
+</head>
+
+<body>
+    <a href="index.html">&larr; Accueil</a>
+    <h1>docscope - extraction PDF</h1>
+
+    <label><input type="radio" name="model" value="ucm" checked> UCM</label>
+    <label><input type="radio" name="model" value="delvaux"> Delvaux</label>
+    <label><input type="radio" name="model" value="apside"> Apside</label>
+    <br><br>
+    <input type="file" id="pdf-input" accept="application/pdf" multiple>
+    <button id="save-button" disabled>Enregistrer les documents</button>
+    <p id="save-status"></p>
+
+    <ul id="file-list"></ul>
+
+    <script>
+        const input = document.getElementById("pdf-input");
+        const fileList = document.getElementById("file-list");
+        const saveButton = document.getElementById("save-button");
+        const saveStatus = document.getElementById("save-status");
+
+        // One entry per successfully extracted file, ready to save.
+        // The Intitulé/Valeur rows (champs + tableau + synthese) are kept
+        // here even though they're no longer displayed on screen: they are
+        // still sent and stored in document_field.
+        let documents = [];
+        let selectedModel = "ucm";
+
+        const fieldsFromExtraction = (data) => [
+            ...data.champs.map((c) => ({ label: c.intitule, value: c.valeur })),
+            ...data.tableau.map((c) => ({ label: `${c.ligne} — ${c.colonne}`, value: c.valeur })),
+            ...data.synthese.map((c) => ({ label: `Synthèse — ${c.intitule}`, value: c.valeur })),
+        ];
+
+        input.addEventListener("change", async () => {
+            const files = Array.from(input.files);
+            if (!files.length) return;
+
+            // Same model applies to the whole batch.
+            selectedModel = document.querySelector('input[name="model"]:checked').value;
+
+            documents = [];
+            fileList.innerHTML = "";
+            saveButton.disabled = true;
+            saveStatus.textContent = "";
+
+            const rows = files.map((file) => {
+                const li = document.createElement("li");
+                li.textContent = `${file.name} — extraction en cours...`;
+                fileList.appendChild(li);
+                return { file, li };
+            });
+
+            for (const { file, li } of rows) {
+                try {
+                    const formData = new FormData();
+                    formData.append("file", file);
+
+                    const response = await fetch(`http://localhost:8000/extract?model=${selectedModel}`, {
+                        method: "POST",
+                        body: formData,
+                    });
+                    if (!response.ok) throw new Error();
+
+                    const data = await response.json();
+                    const fields = fieldsFromExtraction(data);
+                    // A champ with no value is a failed match (bad label/OCR),
+                    // not a real extraction - don't count it as a success.
+                    const valides = fields.filter((f) => f.value).length;
+                    if (valides === 0) throw new Error();
+
+                    documents.push({ name: file.name, fields });
+                    li.textContent = `${file.name} — ${valides}/${fields.length} champs extraits`;
+                } catch {
+                    li.textContent = `${file.name} — échec de l'extraction`;
+                    li.classList.add("error");
+                }
+            }
+
+            saveButton.disabled = documents.length === 0;
+        });
+
+        saveButton.addEventListener("click", async () => {
+            if (!documents.length) return;
+
+            saveStatus.textContent = "Enregistrement en cours...";
+
+            const response = await fetch("http://localhost:8000/documents", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ template: selectedModel, documents }),
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                saveStatus.textContent = data.detail;
+                return;
+            }
+            saveStatus.textContent = `${data.ids.length} document(s) enregistré(s).`;
+            saveButton.disabled = true;
+        });
+    </script>
+</body>
+
+</html>

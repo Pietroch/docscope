@@ -4,10 +4,12 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-# OCR fallback for scanned PDFs (no embedded text layer)
+# OCR fallback for scanned PDFs (no embedded text layer) + wget for healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-fra \
+    tesseract-ocr-eng \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Python deps first (better layer caching)

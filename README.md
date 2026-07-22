@@ -3,12 +3,11 @@
 # docscope
 
 Store, index and analyze documents: extract text from PDFs, persist the
-extracted data in PostgreSQL, and generate Excel reports.
+extracted data in SQLite, and generate Excel reports.
 
 ## Stack
 
-- **api** — FastAPI (Python), package `docscope`
-- **db** — PostgreSQL 16
+- **api** — FastAPI (Python), package `docscope`, SQLite (file, no separate service)
 - **client** — static HTML/JS (prototype, no framework yet), served by nginx
 
 See [docs/architecture.md](docs/architecture.md) for the service map and the
@@ -18,8 +17,8 @@ external documents constraint.
 
 ```bash
 cp .env.example .env
-# fill in DB_PASSWORD, SECRET_KEY and DOCUMENTS_DIR (absolute host path to
-# the external documents folder, mounted read-only into api)
+# fill in SECRET_KEY and DOCUMENTS_DIR (absolute host path to the external
+# documents folder, mounted read-only into api)
 
 make up
 make sh      # shell into the api container

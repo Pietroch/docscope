@@ -6,22 +6,40 @@
 
 from fastapi import APIRouter, HTTPException, UploadFile
 
-from docscope.services.extraction import extract_model_1, extract_pdf_text
+from docscope.core.logging import get_logger
+from docscope.services.extraction import (
+    extract_apside,
+    extract_delvaux,
+    extract_mosica,
+    extract_pdf_text,
+    extract_ucm,
+)
 
 router = APIRouter()
+logger = get_logger(__name__)
+
+# UCM and Apside need flat text first (with OCR fallback); Delvaux reads
+# the PDF itself (word coordinates), so it takes the raw bytes directly.
+EXTRACTORS = {
+    "ucm": lambda content: extract_ucm(extract_pdf_text(content)),
+    "delvaux": extract_delvaux,
+    "apside": lambda content: extract_apside(extract_pdf_text(content)),
+    "mosica": lambda content: extract_mosica(extract_pdf_text(content)),
+}
 
 
 @router.post("/extract")
-async def extract_text(file: UploadFile) -> dict:
+async def extract_text(file: UploadFile, model: str = "ucm") -> dict:
     if file.content_type != "application/pdf":
-        raise HTTPException(status_code=400, detail="File must be a PDF.")
+        raise HTTPException(status_code=400, detail="Le fichier doit être un PDF.")
+    if model not in EXTRACTORS:
+        raise HTTPException(status_code=400, detail="Modèle inconnu.")
 
     # In-memory only: no write to disk, no db, no persistence.
     content = await file.read()
 
     try:
-        text = extract_pdf_text(content)
+        return EXTRACTORS[model](content)
     except Exception:
-        raise HTTPException(status_code=400, detail="Could not read the PDF file.")
-
-    return extract_model_1(text)
+        logger.exception("Extraction failed - model=%s file=%s", model, file.filename)
+        raise HTTPException(status_code=400, detail="Impossible de lire le fichier PDF.")

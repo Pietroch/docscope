@@ -1,11 +1,11 @@
-# tests/test_model_1_fields.py
+# tests/test_ucm_fields.py
 #
-# Safety net for extract_fields() before refactoring model_1.py: it had zero
+# Safety net for extract_fields() before refactoring ucm.py: it had zero
 # test coverage. Text mimics the real 3-column flattened layout (see
-# comments in model_1.py) with one field per label group. "Date de sortie"
+# comments in ucm.py) with one field per label group. "Date de sortie"
 # is left empty on purpose to cover the documented None case.
 
-from docscope.services.models import model_1
+from docscope.services.models import ucm
 
 PAYSLIP_TEXT = """
 Période Janvier 2026
@@ -69,5 +69,5 @@ EXPECTED_FIELDS = [
 
 
 def test_extract_fields_from_payslip():
-    result = model_1.extract_fields(PAYSLIP_TEXT)
+    result = ucm.extract_fields(PAYSLIP_TEXT)
     assert result == EXPECTED_FIELDS

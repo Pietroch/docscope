@@ -1,6 +1,7 @@
 # .gitignore
 
 .env
+api/data/*.db
 *.pyc
 __pycache__/
 node_modules/

@@ -1,6 +1,6 @@
 # Makefile
 
-.PHONY: up down build logs sh shell test lint client-sh help
+.PHONY: up down build logs sh shell test lint client-sh db-reset migrate help
 
 up:         ## Start the stack
 	docker compose up -d
@@ -28,6 +28,12 @@ lint:       ## Lint code
 
 client-sh:  ## Shell into the client container
 	docker compose exec client sh
+
+db-reset:   ## Delete the local SQLite file (recreated empty on next api start)
+	rm -f api/data/docscope.db
+
+migrate:    ## Apply pending migrations (api/src/docscope/migrations/) to the local DB
+	docker compose exec api python src/docscope/migrations/0001_singularize_schema.py
 
 help:       ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-10s %s\n", $$1, $$2}'
