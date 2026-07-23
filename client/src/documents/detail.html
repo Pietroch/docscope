@@ -37,6 +37,10 @@
             cursor: pointer;
         }
 
+        #champs.locked td.editable {
+            cursor: default;
+        }
+
         #champs input {
             width: 100%;
             box-sizing: border-box;
@@ -91,6 +95,20 @@
         .switch input:checked+.slider::before {
             transform: translateX(1.1rem);
         }
+
+        .switch input:disabled+.slider {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Vue graphique : page dédiée par modèle, chargée en iframe
+           (voir GRAPHIQUES ci-dessous). */
+        #champs-graphique {
+            margin-top: 1.5rem;
+            width: 100%;
+            min-height: 500px;
+            border: 1px solid #ccc;
+        }
     </style>
 </head>
 
@@ -99,6 +117,14 @@
     <h1>docscope — document</h1>
 
     <table id="document"></table>
+
+    <div class="vue-toggle">
+        <label class="switch">
+            <input type="checkbox" id="valide-toggle">
+            <span class="slider"></span>
+        </label>
+        <span>Document validé (verrouille les champs)</span>
+    </div>
 
     <div class="vue-toggle">
         <label class="switch">
@@ -118,10 +144,9 @@
         <tbody></tbody>
     </table>
 
-    <!-- TODO: vue graphique des champs, pas encore développée -->
-    <div id="champs-graphique" hidden>
-        <p>Vue graphique à venir.</p>
-    </div>
+    <button type="button" id="ajouter-champ">+ Ajouter un champ</button>
+
+    <iframe id="champs-graphique" hidden></iframe>
 
     <script>
         const documentId = new URLSearchParams(location.search).get("id");
@@ -130,21 +155,82 @@
         const champsBody = document.querySelector("#champs tbody");
         const champsGraphique = document.getElementById("champs-graphique");
         const vueToggle = document.getElementById("vue-graphique-toggle");
+        const ajouterChampBtn = document.getElementById("ajouter-champ");
+        const valideToggle = document.getElementById("valide-toggle");
+
+        // One dedicated graphique page per model - only apside exists so
+        // far. Add an entry here as each new model gets its own view.
+        const GRAPHIQUES = {
+            apside: "graphique-apside.html",
+        };
+        let graphiqueUrl = null;
+
+        // Validated documents are locked against edits (see
+        // DocumentLocked/409 on the API side) - reflected here so clicking
+        // a field or the add button silently does nothing while locked.
+        let locked = false;
+
+        const appliquerVerrouillage = () => {
+            champsTable.classList.toggle("locked", locked);
+            ajouterChampBtn.disabled = locked;
+        };
+
+        valideToggle.addEventListener("change", async () => {
+            const next = valideToggle.checked;
+            const response = await fetch(`http://localhost:8000/documents/${documentId}/validated`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ validated: next }),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                valideToggle.checked = !next;
+                alert(data.detail);
+                return;
+            }
+            locked = data.validated;
+            appliquerVerrouillage();
+        });
 
         vueToggle.addEventListener("change", () => {
             champsTable.hidden = vueToggle.checked;
+            ajouterChampBtn.hidden = vueToggle.checked;
             champsGraphique.hidden = !vueToggle.checked;
+            // Reload every time so edits made in the table since the last
+            // switch are reflected immediately (cache-bust: same URL
+            // wouldn't reload the iframe).
+            if (vueToggle.checked) {
+                champsGraphique.src = `${graphiqueUrl}?id=${documentId}&t=${Date.now()}`;
+            }
         });
 
+        // POST (field.id still null - freshly added row) or PATCH (existing
+        // field) depending on whether the field has been persisted yet.
+        const enregistrerChamp = async (field, label, value) => {
+            const isNew = field.id === null;
+            const url = isNew
+                ? `http://localhost:8000/documents/${documentId}/fields`
+                : `http://localhost:8000/documents/${documentId}/fields/${field.id}`;
+            const response = await fetch(url, {
+                method: isNew ? "POST" : "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ label, value }),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail);
+            return data;
+        };
+
         // Click a cell (intitulé or valeur) to edit it in place; Entrée
-        // saves (PATCH with the full field), Échap or blur without change
-        // cancels back to plain text.
+        // saves, Échap or blur without change cancels back to plain text.
+        // A never-saved row (field.id still null) with nothing typed is
+        // removed instead of left as an empty row.
         const rendreEditable = (td, field, key) => {
             td.className = "editable";
             td.textContent = field[key] ?? "";
 
-            td.addEventListener("click", () => {
-                if (td.querySelector("input")) return;
+            const startEdit = () => {
+                if (locked || td.querySelector("input")) return;
 
                 const previous = field[key] ?? "";
                 const input = document.createElement("input");
@@ -158,27 +244,22 @@
                     const newValue = input.value;
                     if (newValue === previous) {
                         td.textContent = previous;
+                        if (field.id === null && !field.label) td.closest("tr").remove();
                         return;
                     }
                     const label = key === "label" ? newValue : field.label;
                     const value = key === "value" ? newValue : field.value;
-                    const response = await fetch(
-                        `http://localhost:8000/documents/${documentId}/fields/${field.id}`,
-                        {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ label, value }),
-                        }
-                    );
-                    const data = await response.json();
-                    if (!response.ok) {
+                    try {
+                        const data = await enregistrerChamp(field, label, value);
+                        field.id = data.id;
+                        field.label = data.label;
+                        field.value = data.value;
+                        td.textContent = data[key] ?? "";
+                    } catch (err) {
                         td.textContent = previous;
-                        alert(data.detail);
-                        return;
+                        if (field.id === null) td.closest("tr").remove();
+                        alert(err.message);
                     }
-                    field.label = data.label;
-                    field.value = data.value;
-                    td.textContent = data[key] ?? "";
                 };
 
                 input.addEventListener("blur", save);
@@ -187,9 +268,13 @@
                     if (e.key === "Escape") {
                         input.removeEventListener("blur", save);
                         td.textContent = previous;
+                        if (field.id === null && !field.label) td.closest("tr").remove();
                     }
                 });
-            });
+            };
+
+            td.addEventListener("click", startEdit);
+            return startEdit;
         };
 
         const ajouterLigneChamp = (field) => {
@@ -197,12 +282,19 @@
             const tdIntitule = document.createElement("td");
             const tdValeur = document.createElement("td");
 
-            rendreEditable(tdIntitule, field, "label");
+            const startEditLabel = rendreEditable(tdIntitule, field, "label");
             rendreEditable(tdValeur, field, "value");
 
             row.append(tdIntitule, tdValeur);
             champsBody.appendChild(row);
+            return startEditLabel;
         };
+
+        ajouterChampBtn.addEventListener("click", () => {
+            if (locked) return;
+            const startEditLabel = ajouterLigneChamp({ id: null, label: "", value: null });
+            startEditLabel();
+        });
 
         // Raw columns from the `documents` table - no extracted fields yet.
         const LIBELLES = {
@@ -221,6 +313,16 @@
                 return data;
             })
             .then((doc) => {
+                graphiqueUrl = GRAPHIQUES[doc.template];
+                if (!graphiqueUrl) {
+                    vueToggle.disabled = true;
+                    vueToggle.title = "Vue graphique non disponible pour ce modèle";
+                }
+
+                locked = doc.validated;
+                valideToggle.checked = locked;
+                appliquerVerrouillage();
+
                 for (const [champ, libelle] of Object.entries(LIBELLES)) {
                     const row = document.createElement("tr");
                     row.innerHTML = `<th>${libelle}</th><td>${doc[champ]}</td>`;

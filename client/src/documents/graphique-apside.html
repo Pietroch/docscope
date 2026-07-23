@@ -1,0 +1,800 @@
+<!-- client/src/documents/graphique-apside.html -->
+
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <title>docscope — vue graphique Apside</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 0;
+        }
+
+        /* --- vue graphique (bulletin apside) : styles du template v2 --- */
+        :root {
+            --ink: #000;
+            --line: #000;
+            --net-bg: #d9ead3;
+            --page-w: 210mm;
+            --page-h: 297mm;
+            --fs: 8.5pt;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        .sheet {
+            width: auto;
+            min-height: 0;
+            margin: 0;
+            background: #fff;
+            padding: 6mm 4mm;
+            font-size: var(--fs);
+            line-height: 1.25;
+            box-shadow: 0 0 0 1px #ddd;
+            position: relative;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        td,
+        th {
+            padding: 0;
+            vertical-align: top;
+        }
+
+        .b {
+            font-weight: bold;
+        }
+
+        .center {
+            text-align: center;
+        }
+
+        .right {
+            text-align: right;
+        }
+
+        .nowrap {
+            white-space: nowrap;
+        }
+
+        .small {
+            font-size: 7.5pt;
+        }
+
+        .top {
+            width: 100%;
+            margin-bottom: 6px;
+        }
+
+        .top td {
+            vertical-align: top;
+        }
+
+        .employer-box {
+            border: 1px solid var(--line);
+            padding: 6px 8px 4px 8px;
+            width: 58%;
+        }
+
+        .employer-name {
+            font-weight: bold;
+            font-size: 9.5pt;
+        }
+
+        .employer-box .addr {
+            margin-top: 1px;
+        }
+
+        .siret-row {
+            border-top: 1px solid var(--line);
+            margin-top: 6px;
+            padding-top: 3px;
+            display: flex;
+            gap: 18px;
+            align-items: baseline;
+        }
+
+        .siret-row .lbl {
+            font-weight: bold;
+        }
+
+        .title-cell {
+            padding-left: 22px;
+        }
+
+        .doc-title {
+            font-weight: bold;
+            font-size: 20pt;
+            letter-spacing: 2px;
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .period-block {
+            margin-top: 22px;
+            text-align: left;
+            display: inline-block;
+            float: right;
+        }
+
+        .period-block .line {
+            margin-bottom: 2px;
+        }
+
+        .period-block .lbl {
+            font-weight: bold;
+        }
+
+        .subhead {
+            margin-top: 4px;
+        }
+
+        .subhead .row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .subhead .k {
+            font-weight: bold;
+            min-width: 78px;
+        }
+
+        .id-strip {
+            margin-top: 8px;
+        }
+
+        .id-left td {
+            padding-right: 10px;
+            padding-bottom: 1px;
+        }
+
+        .id-left .k {
+            font-weight: bold;
+        }
+
+        .employee-name {
+            font-weight: bold;
+        }
+
+        .id-right {
+            padding-left: 20px;
+            line-height: 1.5;
+        }
+
+        .rtt {
+            margin-top: 8px;
+            width: 64%;
+            border: 1px solid var(--line);
+        }
+
+        .rtt th,
+        .rtt td {
+            border: 1px solid var(--line);
+            padding: 2px 4px;
+            font-size: 7.7pt;
+            text-align: center;
+        }
+
+        .rtt th {
+            font-weight: bold;
+            height: 26px;
+            vertical-align: middle;
+        }
+
+        .rtt td.rowlabel {
+            font-weight: bold;
+            text-align: left;
+            width: 52px;
+        }
+
+        .rtt td.num {
+            text-align: right;
+        }
+
+        .rtt td.dates {
+            text-align: left;
+        }
+
+        .rtt .no-b {
+            border: none;
+        }
+
+        .cot {
+            margin-top: 10px;
+            border: 1px solid var(--line);
+        }
+
+        .cot col.c-num {
+            width: 5%;
+        }
+
+        .cot col.c-des {
+            width: 31%;
+        }
+
+        .cot col.c-nb {
+            width: 9%;
+        }
+
+        .cot col.c-base {
+            width: 9%;
+        }
+
+        .cot col.c-tx1 {
+            width: 8%;
+        }
+
+        .cot col.c-gain {
+            width: 9%;
+        }
+
+        .cot col.c-ret {
+            width: 9%;
+        }
+
+        .cot col.c-tx2 {
+            width: 9%;
+        }
+
+        .cot col.c-pret {
+            width: 11%;
+        }
+
+        .cot th,
+        .cot td {
+            border-left: 1px solid var(--line);
+            border-right: 1px solid var(--line);
+            padding: 0 4px;
+            font-size: 8pt;
+            height: 13.5px;
+            line-height: 13.5px;
+        }
+
+        .cot thead .grp th {
+            border-bottom: 1px solid var(--line);
+            border-top: none;
+            text-align: center;
+            font-weight: bold;
+            height: 15px;
+            line-height: 15px;
+        }
+
+        .cot thead .grp .empty {
+            border-left: none;
+            border-right: none;
+        }
+
+        .cot thead .cols th {
+            border-bottom: 1px solid var(--line);
+            text-align: center;
+            font-weight: bold;
+            vertical-align: middle;
+        }
+
+        .cot tbody td {
+            border-bottom: none;
+            border-top: none;
+        }
+
+        .cot .num {
+            text-align: left;
+            padding-left: 6px;
+        }
+
+        .cot .des {
+            text-align: left;
+        }
+
+        .cot .r {
+            text-align: right;
+        }
+
+        .cot .patronale {
+            background: var(--net-bg);
+        }
+
+        .cot .patheadL,
+        .cot .patronale {
+            border-left: 1px solid var(--line);
+        }
+
+        .cot .pat2 {
+            background: var(--net-bg);
+        }
+
+        .cot .totalrow td {
+            padding-top: 2px;
+            padding-bottom: 2px;
+        }
+
+        .cot .totalrow .des {
+            font-weight: bold;
+        }
+
+        .cot .spacer td {
+            height: 8px;
+            border: none;
+        }
+
+        .cot .spacer td.patronale {
+            border-left: 1px solid var(--line);
+        }
+
+        .cot .ruled td {
+            border-top: 1px solid var(--line);
+        }
+
+        .cot .filler td {
+            height: 360px;
+            border-bottom: none;
+        }
+
+        .cot .filler td.patronale {
+            border-left: 1px solid var(--line);
+        }
+
+        .cot .spacer td.pat2,
+        .cot .filler td.pat2 {
+            border-left: 1px solid var(--line);
+        }
+
+        .bottom {
+            margin-top: 12px;
+        }
+
+        .bottom table {
+            border-collapse: collapse;
+        }
+
+        .bottom .cell,
+        .bottom th,
+        .bottom td {
+            border: 1px solid var(--line);
+            padding: 2px 5px;
+            font-size: 7.7pt;
+        }
+
+        .totwrap {
+            display: flex;
+            gap: 0;
+            align-items: stretch;
+        }
+
+        .hours {
+            border-collapse: collapse;
+        }
+
+        .hours td,
+        .hours th {
+            border: 1px solid var(--line);
+            padding: 2px 5px;
+            text-align: right;
+            height: 18px;
+        }
+
+        .hours .hlabel {
+            text-align: left;
+            font-weight: normal;
+        }
+
+        .hours .corner {
+            border-left: none;
+            border-top: none;
+        }
+
+        .hours th {
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .eurseam {
+            border-collapse: collapse;
+            margin-left: -1px;
+        }
+
+        .eurseam td {
+            border: 1px solid var(--line);
+            padding: 2px 6px;
+            height: 18px;
+        }
+
+        .eurseam .blank {
+            border-left: none;
+            border-top: none;
+            border-right: none;
+        }
+
+        .eurseam .cur {
+            font-weight: bold;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .band {
+            border-collapse: collapse;
+            margin-left: -1px;
+            flex: 1;
+        }
+
+        .band th,
+        .band td {
+            border: 1px solid var(--line);
+            padding: 2px 5px;
+            text-align: right;
+            height: 18px;
+        }
+
+        .band th {
+            font-weight: bold;
+            text-align: center;
+            vertical-align: middle;
+            font-size: 7.3pt;
+        }
+
+        .band .pa {
+            font-weight: bold;
+            text-align: center;
+            width: 46px;
+        }
+
+        .netbox {
+            border: 1px solid var(--line);
+            background: var(--net-bg);
+            width: 150px;
+            margin-left: -1px;
+            align-self: flex-start;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .netbox .nettitle {
+            font-weight: bold;
+            font-size: 9.5pt;
+            padding: 6px 4px 0 4px;
+        }
+
+        .netbox .netval {
+            font-weight: bold;
+            font-size: 15pt;
+            margin-top: auto;
+            padding-top: 14px;
+        }
+
+        #anomalies {
+            margin: 1rem;
+            border: 1px solid #e0b400;
+            background: #fff8e1;
+            border-radius: 6px;
+            padding: 0.75rem 1rem;
+            font-size: 0.9rem;
+            font-family: sans-serif;
+        }
+
+        #anomalies h2 {
+            font-size: 0.95rem;
+            margin: 0 0 0.4rem;
+            color: #8a6d00;
+        }
+
+        #anomalies ul {
+            margin: 0;
+            padding-left: 1.2rem;
+        }
+
+        #anomalies.ok {
+            border-color: #2e7d32;
+            background: #edf7ed;
+        }
+
+        #anomalies.ok h2 {
+            color: #2e7d32;
+        }
+
+        #vue-error {
+            color: #b00020;
+            margin: 1rem;
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="anomalies" hidden></div>
+    <div id="vue-error" hidden></div>
+    <div id="bulletin-mount"></div>
+
+    <script>
+        const documentId = new URLSearchParams(location.search).get("id");
+        const vueError = document.getElementById("vue-error");
+        const anomaliesBox = document.getElementById("anomalies");
+        const bulletinMount = document.getElementById("bulletin-mount");
+
+        // petit échappement pour le bandeau d'anomalies (texte serveur)
+        const escapeHtml = (s) => String(s)
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+        const afficherAnomalies = (anomalies) => {
+            anomaliesBox.hidden = false;
+            if (anomalies.length === 0) {
+                anomaliesBox.className = "ok";
+                anomaliesBox.innerHTML = "<h2>Aucune anomalie détectée</h2>";
+                return;
+            }
+            anomaliesBox.className = "";
+            const items = anomalies.map((a) => `<li>${escapeHtml(a)}</li>`).join("");
+            anomaliesBox.innerHTML =
+                `<h2>${anomalies.length} anomalie(s) détectée(s)</h2><ul>${items}</ul>`;
+        };
+
+        // ---- couche de rendu du bulletin (template v2), aucune donnée en dur ----
+        const esc = s => (s == null ? "" : String(s))
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const nl2br = s => esc(s).replace(/\n/g, "<br>");
+        const cell = v => (v == null || v === "") ? "" : esc(v);
+
+        function renderLeave(rows) {
+            return rows.map(r => `
+      <tr>
+        <td class="rowlabel">${esc(r.label)}</td>
+        <td class="num">${cell(r.rttCollab)}</td>
+        <td class="num">${cell(r.rttEmployeur)}</td>
+        <td class="num">${cell(r.conges)}</td>
+        <td class="dates">${esc(r.du)}</td>
+        <td class="dates">${esc(r.au)}</td>
+      </tr>`).join("");
+        }
+
+        function renderLines(lines) {
+            let html = "";
+            for (const l of lines) {
+                if (l.type === "gap") {
+                    html += `<tr class="spacer">
+          <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+          <td class="pat2"></td><td class="patronale"></td></tr>`;
+                    continue;
+                }
+                if (l.type === "total") {
+                    html += `<tr class="totalrow ruled">
+          <td></td>
+          <td class="des">${esc(l.label)}</td>
+          <td></td><td></td><td></td>
+          <td class="r">${cell(l.gain)}</td>
+          <td class="r">${cell(l.retenueSal)}</td>
+          <td class="r pat2"></td>
+          <td class="r patronale">${cell(l.retenuePatr)}</td>
+        </tr>`;
+                    continue;
+                }
+                html += `<tr>
+        <td class="num">${cell(l.num)}</td>
+        <td class="des">${esc(l.label)}</td>
+        <td class="r">${cell(l.nombre)}</td>
+        <td class="r">${cell(l.base)}</td>
+        <td class="r">${cell(l.tauxSal)}</td>
+        <td class="r">${cell(l.gain)}</td>
+        <td class="r">${cell(l.retenueSal)}</td>
+        <td class="r pat2">${cell(l.tauxPatr)}</td>
+        <td class="r patronale">${cell(l.retenuePatr)}</td>
+      </tr>`;
+            }
+            return html;
+        }
+
+        function render(d) {
+            const emp = d.employer, p = d.period, c = d.contract, e = d.employee, t = d.totals;
+
+            return `
+    <div class="sheet">
+
+      <!-- ============ TOP HEADER ============ -->
+      <table class="top">
+        <tr>
+          <td>
+            <div class="employer-box">
+              <div class="employer-name">${esc(emp.name)}</div>
+              ${emp.addressLines.map(a => `<div class="addr">${esc(a)}</div>`).join("")}
+              <div class="siret-row">
+                <span><span class="lbl">SIRET</span>&nbsp;&nbsp;${esc(emp.siret)} ${esc(emp.siretSuffix)}</span>
+                <span><span class="lbl">NAF</span>&nbsp;&nbsp;${esc(emp.naf)}</span>
+              </div>
+            </div>
+
+            <div class="subhead">
+              <div class="row"><span class="k">Cotisations à</span><span>${esc(emp.cotisationsA)}</span><span>&nbsp;&nbsp;&nbsp;&nbsp;${esc(emp.urssafRef)}</span></div>
+              <div class="row"><span class="k">Conv. coll.</span><span>${esc(emp.convCollCode)} - ${nl2br(emp.convCollLabel)}</span></div>
+            </div>
+          </td>
+
+          <td class="title-cell">
+            <div class="doc-title">BULLETIN DE PAIE</div>
+            <div class="period-block">
+              <div class="line"><span class="lbl">Période du</span>&nbsp;&nbsp;${esc(p.from)}&nbsp;&nbsp;<span class="lbl">au</span>&nbsp;&nbsp;${esc(p.to)}</div>
+              <div class="line">Paiement le&nbsp;&nbsp;${esc(p.paymentDate)}&nbsp;&nbsp;par&nbsp;&nbsp;${esc(p.paymentMode)}</div>
+              <div class="line"><span class="lbl">Identifiant</span>&nbsp;${esc(p.identifiant)}&nbsp;&nbsp;&nbsp;&nbsp;<span class="lbl">Ancienneté</span>&nbsp;${esc(p.anciennete)}</div>
+            </div>
+          </td>
+        </tr>
+      </table>
+
+      <!-- ============ IDENTITY STRIP ============ -->
+      <table class="id-strip">
+        <tr>
+          <td style="width:58%">
+            <table class="id-left">
+              <tr>
+                <td class="k">Niveau</td><td>${esc(c.niveau)}</td>
+                <td class="k">Coefficient</td><td>${esc(c.coefficient)}</td>
+              </tr>
+              <tr>
+                <td class="k">Emploi</td><td>${esc(c.emploi)}</td>
+                <td></td><td></td>
+              </tr>
+              <tr>
+                <td class="k">Catégorie</td><td>${esc(c.categorie)}</td>
+                <td class="k">Section</td><td>${esc(c.section)}</td>
+              </tr>
+              <tr>
+                <td class="k">Matricule s.s.</td><td colspan="3">${esc(c.matriculeSS)}</td>
+              </tr>
+              <tr>
+                <td class="k">C.B</td><td colspan="3">${esc(c.cb)}</td>
+              </tr>
+              <tr>
+                <td class="k">Domiciliation</td><td colspan="3">${esc(c.domiciliation)}</td>
+              </tr>
+            </table>
+          </td>
+          <td class="id-right">
+            <div><span class="b">${esc(e.civility)}</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="employee-name">${esc(e.name)}</span></div>
+            ${e.addressLines.map(a => `<div>${esc(a)}</div>`).join("")}
+          </td>
+        </tr>
+      </table>
+
+      <!-- ============ RTT / CONGES ============ -->
+      <table class="rtt">
+        <thead>
+          <tr>
+            <th class="no-b" style="border-top:none;border-left:none"></th>
+            <th>RTT<br>collaborateur</th>
+            <th>RTT<br>employeur</th>
+            <th>Congés</th>
+            <th colspan="2">Dates de congés</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${renderLeave(d.leave.rows)}
+        </tbody>
+      </table>
+
+      <!-- ============ COTISATIONS TABLE ============ -->
+      <table class="cot">
+        <colgroup>
+          <col class="c-num"><col class="c-des"><col class="c-nb"><col class="c-base">
+          <col class="c-tx1"><col class="c-gain"><col class="c-ret">
+          <col class="c-tx2"><col class="c-pret">
+        </colgroup>
+        <thead>
+          <tr class="grp">
+            <th class="empty"></th><th class="empty"></th><th class="empty"></th><th class="empty"></th>
+            <th colspan="3">Part salariale</th>
+            <th colspan="2" class="pat2">Part patronale</th>
+          </tr>
+          <tr class="cols">
+            <th>N°</th>
+            <th>Désignation</th>
+            <th>Nombre</th>
+            <th>Base</th>
+            <th>Taux</th>
+            <th>Gain</th>
+            <th>Retenue</th>
+            <th class="pat2">Taux</th>
+            <th class="patronale">Retenue</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${renderLines(d.lines)}
+          <tr class="filler">
+            <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+            <td class="pat2"></td><td class="patronale"></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- ============ BOTTOM TOTALS BAND ============ -->
+      <div class="bottom">
+        <div class="totwrap">
+
+          <!-- Hours recap -->
+          <table class="hours">
+            <tr>
+              <th class="corner"></th><th>Période</th><th>Année</th>
+            </tr>
+            <tr>
+              <td class="hlabel">Heures travaillées</td>
+              <td>${esc(t.hoursWorked.period)}</td>
+              <td>${esc(t.hoursWorked.year)}</td>
+            </tr>
+            <tr>
+              <td class="hlabel">Heures supp.</td>
+              <td>${esc(t.hoursOvertime.period)}</td>
+              <td>${esc(t.hoursOvertime.year)}</td>
+            </tr>
+          </table>
+
+          <!-- EUR seam: one cell spanning the two data rows, joins both tables -->
+          <table class="eurseam">
+            <tr><td class="blank"></td></tr>
+            <tr><td class="cur" rowspan="2">${esc(t.currency)}</td></tr>
+          </table>
+
+          <!-- Money band -->
+          <table class="band">
+            <tr>
+              <th class="pa"></th>
+              <th>Brut Fiscal</th>
+              <th>Base Sécurité<br>Sociale</th>
+              <th>Charges patronales</th>
+              <th>Charges salariales</th>
+              <th>Net imposable</th>
+            </tr>
+            <tr>
+              <td class="pa">Période</td>
+              <td>${esc(t.brutFiscal.period)}</td>
+              <td>${esc(t.baseSecuriteSoc.period)}</td>
+              <td>${esc(t.chargesPatronales.period)}</td>
+              <td>${esc(t.chargesSalariales.period)}</td>
+              <td>${esc(t.netImposable.period)}</td>
+            </tr>
+            <tr>
+              <td class="pa">Année</td>
+              <td>${esc(t.brutFiscal.year)}</td>
+              <td>${esc(t.baseSecuriteSoc.year)}</td>
+              <td>${esc(t.chargesPatronales.year)}</td>
+              <td>${esc(t.chargesSalariales.year)}</td>
+              <td>${esc(t.netImposable.year)}</td>
+            </tr>
+          </table>
+
+          <!-- Net à payer -->
+          <div class="netbox">
+            <div class="nettitle">Net à payer</div>
+            <div class="netval">${esc(d.netToPay.amount)}</div>
+            <div class="neteur">${esc(d.netToPay.currency)}</div>
+          </div>
+
+        </div>
+        <div class="footer-note">${esc(d.footerNote)}</div>
+      </div>
+
+    </div>`;
+        }
+
+        // Récupère le payslip structuré depuis le back et rend le bulletin v2.
+        fetch(`http://localhost:8000/documents/${documentId}/payslip`)
+            .then(async (response) => {
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail);
+                return data;
+            })
+            .then((data) => {
+                afficherAnomalies(data.anomalies || []);
+                bulletinMount.innerHTML = render(data);
+            })
+            .catch((err) => {
+                vueError.hidden = false;
+                vueError.textContent = `Impossible de charger la vue graphique : ${err.message}`;
+            });
+    </script>
+</body>
+
+</html>

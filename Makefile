@@ -29,8 +29,9 @@ lint:       ## Lint code
 client-sh:  ## Shell into the client container
 	docker compose exec client sh
 
-db-reset:   ## Delete the local SQLite file (recreated empty on next api start)
-	rm -f api/data/docscope.db
+db-reset:   ## Wipe unvalidated documents (validated ones + their fields are kept)
+	docker compose up -d api
+	docker compose exec api python src/docscope/scripts/reset_db.py
 
 migrate:    ## Apply pending migrations (api/src/docscope/migrations/) to the local DB
 	docker compose exec api python src/docscope/migrations/0001_singularize_schema.py

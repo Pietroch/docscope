@@ -8,12 +8,14 @@
 # one irregular case a plural convention forces you to special-case).
 
 import re
+from collections import OrderedDict
 from datetime import date, datetime
 
 from sqlalchemy import CheckConstraint, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 from docscope.core.database import engine
+from docscope.services.payslip_apside import build_payslip
 
 TEMPLATES = ("ucm", "delvaux", "apside")
 
@@ -56,6 +58,10 @@ class Document(Base):
     date_document: Mapped[date]
     company_id: Mapped[int] = mapped_column(ForeignKey("company.id"))
     person_id: Mapped[int] = mapped_column(ForeignKey("person.id"))
+    # Locks the document's fields against edits once corrected data has been
+    # confirmed as final - also what `make db-reset` keeps (see
+    # scripts/reset_db.py), so validated imports survive a dev DB wipe.
+    validated: Mapped[bool] = mapped_column(default=False)
 
 
 class DocumentField(Base):
@@ -156,6 +162,7 @@ def _document_dict(document: Document, company: Company, person: Person) -> dict
         "date": document.date_document.isoformat(),
         "company": company.name,
         "person": f"{person.last_name} {person.first_name}",
+        "validated": document.validated,
     }
 
 
@@ -172,6 +179,70 @@ def list_documents() -> list[dict]:
             .all()
         )
         return [_document_dict(*row) for row in rows]
+
+
+# Matches a cotisation-table field's label ("<code> — <attr>", e.g.
+# "5620 — Base", "Total Cotisations — Gain (sal)") - same convention across
+# ucm/delvaux/apside/mosica. Restricted to digit codes or "Total ..." so it
+# never catches unrelated labels ("Synthèse — Net à payer" for instance).
+_TABLE_LINE_RE = re.compile(r"^(?P<code>\d+|Total .+?)\s+—\s+.+$")
+
+
+def _table_line_sort_key(code: str):
+    try:
+        return (0, int(code))
+    except ValueError:
+        return (1, code)
+
+
+def _reorder_table_fields(fields: list[dict]) -> list[dict]:
+    """Cotisation-table fields aren't always extracted in ascending code
+    order, and a stray row (e.g. "5620") can even land far from the rest
+    of the table (after the synthèse block). So every matching field is
+    gathered from wherever it sits in the list, sorted ascending by code
+    (with "Total ..." rows anchored right after the numbered code that
+    preceded them originally), and the whole block is reinserted at the
+    position of the first such field. Fields outside the table (employer,
+    contract, synthèse...) keep their original position."""
+    by_code = OrderedDict()
+    for f in fields:
+        m = _TABLE_LINE_RE.match(f["label"])
+        if m:
+            by_code.setdefault(m.group("code"), []).append(f)
+
+    if not by_code:
+        return fields
+
+    last_numeric = None
+    anchor_of_total = {}
+    for code in by_code:
+        if code.startswith("Total "):
+            anchor_of_total[code] = last_numeric
+        else:
+            last_numeric = code
+
+    numeric_codes_sorted = sorted(
+        (code for code in by_code if not code.startswith("Total ")),
+        key=_table_line_sort_key,
+    )
+
+    final_codes = [code for code, anchor in anchor_of_total.items() if anchor is None]
+    for code in numeric_codes_sorted:
+        final_codes.append(code)
+        final_codes += [t for t, anchor in anchor_of_total.items() if anchor == code]
+
+    sorted_table_fields = [f for code in final_codes for f in by_code[code]]
+
+    result = []
+    inserted = False
+    for f in fields:
+        if _TABLE_LINE_RE.match(f["label"]):
+            if not inserted:
+                result.extend(sorted_table_fields)
+                inserted = True
+            continue
+        result.append(f)
+    return result
 
 
 def get_document(document_id: int) -> dict | None:
@@ -195,16 +266,30 @@ def get_document(document_id: int) -> dict | None:
             .order_by(DocumentField.id)
             .all()
         )
-        result["fields"] = [{"id": f.id, "label": f.label, "value": f.value} for f in fields]
+        raw_fields = [{"id": f.id, "label": f.label, "value": f.value} for f in fields]
+        result["fields"] = _reorder_table_fields(raw_fields)
         return result
+
+
+class DocumentLocked(Exception):
+    """Raised when a field edit/add is attempted on a validated document."""
+
+    def __init__(self, document_id: int):
+        self.document_id = document_id
+        super().__init__(f"Document {document_id} is validated and locked for edits.")
 
 
 def update_field(document_id: int, field_id: int, label: str, value: str | None) -> dict | None:
     """Correct a single extracted field's label and/or value. Scoped to
     document_id so a field id can't be used to edit another document's
     data. Returns the updated field, or None if it doesn't belong to that
-    document."""
+    document. Raises DocumentLocked if the document is validated."""
     with Session(engine) as session:
+        document = session.get(Document, document_id)
+        if document is None:
+            return None
+        if document.validated:
+            raise DocumentLocked(document_id)
         field = (
             session.query(DocumentField)
             .filter(DocumentField.id == field_id, DocumentField.document_id == document_id)
@@ -216,3 +301,66 @@ def update_field(document_id: int, field_id: int, label: str, value: str | None)
         field.value = value
         session.commit()
         return {"id": field.id, "label": field.label, "value": field.value}
+
+
+def create_field(document_id: int, label: str, value: str | None) -> dict | None:
+    """Add a new field to an existing document. Returns None if the
+    document doesn't exist. Raises DocumentLocked if the document is
+    validated."""
+    with Session(engine) as session:
+        document = session.get(Document, document_id)
+        if document is None:
+            return None
+        if document.validated:
+            raise DocumentLocked(document_id)
+        field = DocumentField(document_id=document_id, label=label, value=value)
+        session.add(field)
+        session.commit()
+        return {"id": field.id, "label": field.label, "value": field.value}
+
+
+def set_document_validated(document_id: int, validated: bool) -> dict | None:
+    """Lock or unlock a document's fields against edits. Returns None if
+    the document doesn't exist."""
+    with Session(engine) as session:
+        document = session.get(Document, document_id)
+        if document is None:
+            return None
+        document.validated = validated
+        session.commit()
+        return {"id": document.id, "validated": document.validated}
+
+
+class WrongTemplate(Exception):
+    """Raised when a template-specific view is requested for a document
+    whose template doesn't match."""
+
+    def __init__(self, document_id: int, expected: str, actual: str):
+        self.document_id = document_id
+        self.expected = expected
+        self.actual = actual
+        super().__init__(
+            f"Document {document_id} is '{actual}', not '{expected}'."
+        )
+
+
+def get_apside_payslip(document_id: int) -> dict | None:
+    """Structured 'payslip' object for an apside document, built from its
+    extracted fields (see payslip_apside.build_payslip). Returns None if the
+    document doesn't exist; raises WrongTemplate if it isn't an apside
+    document. The reconstruction is static: it reflects the fields as they
+    are stored at call time."""
+    document = get_document(document_id)
+    if document is None:
+        return None
+    if document["template"] != "apside":
+        raise WrongTemplate(document_id, "apside", document["template"])
+
+    payslip = build_payslip(document["fields"])
+    # carry a bit of document identity through, handy for the page header
+    payslip["document"] = {
+        "id": document["id"],
+        "name": document["name"],
+        "date": document["date"],
+    }
+    return payslip
