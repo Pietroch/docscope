@@ -31,4 +31,9 @@ jobs:
         run: ruff check .
 
       - name: Test
+        env:
+          # No docker volume on the runner - /app/data (the .env.example
+          # default) doesn't exist here, so create_tables() (called at
+          # import time in main.py) needs a writable path instead.
+          DB_PATH: ${{ runner.temp }}/docscope-test.db
         run: pytest tests
