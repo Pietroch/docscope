@@ -71,9 +71,9 @@ def _extract_employer_worker_block(page) -> list[tuple[str, str | None]]:
 
     return [
         ("Nom employeur", employer_lines[0] or None),
-        ("Adresse employeur", " ".join(l for l in employer_lines[1:] if l) or None),
+        ("Adresse employeur", " ".join(line for line in employer_lines[1:] if line) or None),
         ("Nom travailleur", worker_lines[0] or None),
-        ("Adresse travailleur", " ".join(l for l in worker_lines[1:] if l) or None),
+        ("Adresse travailleur", " ".join(line for line in worker_lines[1:] if line) or None),
     ]
 
 

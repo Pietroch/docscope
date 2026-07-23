@@ -189,9 +189,9 @@ def _extract_totals_block(joined: str) -> list[tuple[str, str | None]]:
     )
 
     lines = joined.splitlines()
-    worked = next((l for l in lines if "Heures travaill" in l), None)
+    worked = next((line for line in lines if "Heures travaill" in line), None)
     # Last line of the block: the one carrying "Euros" (the Net à payer unit).
-    annee_line = next((l for l in lines if "Euros" in l), None)
+    annee_line = next((line for line in lines if "Euros" in line), None)
     if worked is None or annee_line is None:
         return empty
 
@@ -380,8 +380,8 @@ def extract_earnings_table(text: str):
     # footer) belongs to _extract_totals_block, not to the table - cutting
     # here stops those lines from being mistaken for rubrics/detail.
     end = next(
-        (i for i, l in enumerate(section_lines)
-         if "Heures travaill" in l or "Brut Fiscal" in l),
+        (i for i, line in enumerate(section_lines)
+         if "Heures travaill" in line or "Brut Fiscal" in line),
         len(section_lines),
     )
     section_lines = section_lines[:end]

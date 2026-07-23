@@ -53,7 +53,7 @@ def _extract_employer_block(joined: str) -> list[tuple[str, str | None]]:
             # ("<n> rue ...") or at its city ("<cp> <VILLE>"). A lone postal
             # code like "CS 71975" is NOT a cut point (must be <cp> + city).
             left.append(re.split(r"\s+(?=\d+\s+rue\b|\d{5}\s+[A-ZÉÈ])", line)[0].strip())
-        fields.append(("Adresse employeur", " ".join(l for l in left if l) or None))
+        fields.append(("Adresse employeur", " ".join(part for part in left if part) or None))
     else:
         fields.append(("Adresse employeur", None))
 
@@ -244,7 +244,7 @@ def extract_earnings_table(text: str):
     Returns ([], []) if the table section isn't found.
     """
     lines = [line.strip() for line in text.splitlines() if line.strip()]
-    start = next((i for i, l in enumerate(lines) if l.startswith(_SECTION_START)), None)
+    start = next((i for i, line in enumerate(lines) if line.startswith(_SECTION_START)), None)
     if start is None:
         return [], []
     section = lines[start + 1:]
