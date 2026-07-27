@@ -101,9 +101,9 @@ def _extract_identity_grid(joined: str) -> list[tuple[str, str | None]]:
         ("Ancienneté", f"{m.group(1)} an(s) et {m.group(2)} mois" if m else None)
     )
 
-    add = lambda label, pat, f=0: fields.append(
-        (label, (lambda mm: mm.group(1).strip() if mm else None)(re.search(pat, joined, f)))
-    )
+    def add(label, pat, f=0):
+        mm = re.search(pat, joined, f)
+        fields.append((label, mm.group(1).strip() if mm else None))
     add("Position", r"Position\s+(\d(?:\.\d+)+)")
     add("Horaire", r"Position\s+\S+\s+(\d{1,3},\d{3,4})")
 
@@ -158,7 +158,7 @@ def _extract_header_refs(joined: str) -> list[tuple[str, str | None]]:
     fields = []
 
     period_line = next(
-        (l for l in joined.splitlines() if "rode" in l.lower() or "riode" in l.lower()),
+        (line for line in joined.splitlines() if "rode" in line.lower() or "riode" in line.lower()),
         "",
     )
     dates = re.findall(r"\d{1,2}[/tT]\d{2}[/tT]\d{1,4}", period_line)
