@@ -6,12 +6,20 @@
 # values keep the reading order of the visual layout but some same-line
 # pairs come out reordered (SIRET / NAF swap vs. the visual left-to-right
 # order), some words get glued together (e.g. "Paiementle"), and blank
-# lines inside blocks get dropped. Every rule anchors on its own label
-# independently, never on token order.
+# lines inside blocks get dropped - and, worse than the other templates,
+# whole blocks land out of order: on this payslip the URSSAF number and the
+# convention code are OCR'd *below* their own labels, several lines away,
+# and the pay period / payment date / mode sit in a right-hand box that
+# flattens to its own lines, detached from the labels on the left. So rules
+# here anchor on their own label when the value is adjacent, and fall back
+# to matching the value *by its shape* (a date range, a long digit run, a
+# NIR key) when the flattening has torn label and value apart. Never on
+# token order.
 #
 # Two independent parts (same public interface as the other models):
 #   - extract_fields(): single key/value fields (employer, header, contract)
-#   - extract_earnings_table(): the "Désignation" table - not rebuilt yet.
+#   - extract_earnings_table(): the "Désignation" table (codes + amounts,
+#     inline subtotals, bottom totals grid, and the top RTT/Congés grid).
 
 import re
 import unicodedata
@@ -55,17 +63,34 @@ def _extract_employer_block(joined: str) -> list[tuple[str, str | None]]:
 
 
 def _extract_header_refs(joined: str) -> list[tuple[str, str | None]]:
+    # The period / payment box is OCR'd as its own detached block: the labels
+    # ("Période du", "Paiement le") come out on lines with no value, and the
+    # values ("01/07/14 au 31/07/14", "28/07/14", "par Virement") land a few
+    # lines below. So period, payment date and mode are matched by their own
+    # shape, not by adjacency to the label. Identifiant and Ancienneté keep
+    # their value on the label line and are read normally.
     fields = []
 
-    def add(label, pattern, flags=0):
-        m = re.search(pattern, joined, flags)
-        fields.append((label, m.group(1).strip() if m else None))
+    # Pay period: "<date> au <date>", the only date-range on the page.
+    m = re.search(r"(\d{2}/\d{2}/\d{2,4}\s+au\s+\d{2}/\d{2}/\d{2,4})", joined)
+    fields.append(("Période", m.group(1).strip() if m else None))
 
-    add("Période", r"P[ée]riode du\s+(.+)")
-    add("Date de paiement", r"Paiement\s*le\s+(\S+)")
-    add("Mode de paiement", r"Paiement\s*le\s+\S+\s+par\s+(.+)")
-    add("Identifiant", r"Identifiant\s+(\S+)")
-    add("Ancienneté", r"Anciennet[ée]\s+(\S+)")
+    # Payment date: a bare date on its own line (not part of the range, not
+    # a period label). It sits just after the range in reading order.
+    m = re.search(
+        r"\d{2}/\d{2}/\d{2,4}\s+au\s+\d{2}/\d{2}/\d{2,4}\s*\n(\d{2}/\d{2}/\d{2,4})\b",
+        joined,
+    )
+    fields.append(("Date de paiement", m.group(1).strip() if m else None))
+
+    # Mode of payment: the token(s) after "par" (the "par Virement" line).
+    m = re.search(r"\bpar\s+([A-Za-zÀ-ÿ]+)", joined)
+    fields.append(("Mode de paiement", m.group(1).strip() if m else None))
+
+    m = re.search(r"Identifiant\s+(\S+)", joined)
+    fields.append(("Identifiant", m.group(1).strip() if m else None))
+    m = re.search(r"Anciennet[ée]\s+(\S+)", joined)
+    fields.append(("Ancienneté", m.group(1).strip() if m else None))
 
     return fields
 
@@ -77,14 +102,35 @@ def _extract_contract_block(joined: str) -> list[tuple[str, str | None]]:
         m = re.search(pattern, joined, flags)
         fields.append((label, m.group(1).strip() if m else None))
 
-    # URSSAF number: a trailing " 2" fragment sometimes follows on the same
-    # line - (\S+) stops at the first space, keeping only the number.
-    add("Cotisations URSSAF", r"Cotisations [àa] URSSAF\s+(\S+)")
+    # URSSAF number: OCR'd on its own line, several lines below the
+    # "Cotisations à URSSAF" label (not adjacent), and shaped as a long digit
+    # run optionally followed by a 1-2 digit control fragment. Match it by
+    # shape. Guard against catching the SIRET (9+5 digits) or the matricule
+    # (13 digits): require >= 15 leading digits, which the URSSAF number has
+    # here and the others don't.
+    m = re.search(r"^(\d{15,}(?:\s+\d{1,2})?)\s*$", joined, re.MULTILINE)
+    fields.append(("Cotisations URSSAF", m.group(1).strip() if m else None))
 
-    # Convention collective: code + label, label continues on the next
-    # (label-less) line - captured as two lines and rejoined.
-    m = re.search(r"Conv\.\s*coll\.\s+(.+\n.+)", joined)
-    convention = " ".join(m.group(1).split("\n")) if m else None
+    # Convention collective: code + label. On this scan the code line
+    # ("3018 - Bureaux d'Etudes ...") and the tail line ("Conseils Sociétés
+    # de Conseils") are OCR'd out of order (the tail lands *above* the code,
+    # right after "Conv. coll."). Rebuild from both, joined with " - ":
+    # the "<code> - <first half>" line plus the "Conseils ..." tail if present.
+    convention = None
+    m_code = re.search(r"^(\d{3,4}\s*-\s*Bureaux.+)$", joined, re.MULTILINE)
+    if m_code:
+        parts = [m_code.group(1).strip()]
+        m_tail = re.search(r"Conv\.\s*coll\.\s*\n(.+)", joined)
+        if m_tail:
+            tail = m_tail.group(1).strip()
+            # Only append a genuine label tail (letters), not another anchor.
+            if tail and not tail[0].isdigit():
+                parts.append(tail)
+        convention = " - ".join(parts)
+    else:
+        # Fallback: label-adjacent capture over two lines (older layout).
+        m = re.search(r"Conv\.\s*coll\.\s+(.+\n.+)", joined)
+        convention = " ".join(m.group(1).split("\n")) if m else None
     fields.append(("Convention collective", convention))
 
     def add_bounded(label, pattern, flags=0):
@@ -102,23 +148,31 @@ def _extract_contract_block(joined: str) -> list[tuple[str, str | None]]:
 
     add("Emploi", r"Emploi\s+(.+)")
 
-    # Catégorie / Section: two labels on one line - Catégorie bounded by
-    # the Section label, Section is the value after it.
-    add_bounded("Catégorie", r"Cat[ée]gorie\s+(.*?)\s+Section")
+    # Catégorie / Section: "Catégorie <val>" and "Section <val>" are on
+    # different OCR lines here, so Catégorie can't be bounded by the Section
+    # label. Bound it on the known category values instead (Cadre / Non
+    # cadre), which read reliably. Section keeps its own label-adjacent value.
+    add_bounded("Catégorie", r"Cat[ée]gorie\s+(Non cadre|Cadre)\b")
     add("Section", r"Section\s+(\S+)")
 
     # Matricule s.s. (French NIR): 13 digits + a 2-digit control key. The
-    # key is deterministic (97 - NIR mod 97), so instead of trusting the
-    # flattening to keep the two fragments together, we recompute it: the
-    # key is only appended when it matches, which both validates the OCR
-    # read of the NIR and guarantees the two fragments belong together.
-    # If the key doesn't check out, keep the 13 digits alone (not guessed).
-    m = re.search(r"Matricule s\.?s\.?\s+(\d{13})\s+(\d{2})", joined)
-    if m and int(m.group(2)) == 97 - (int(m.group(1)) % 97):
-        matricule = f"{m.group(1)} {m.group(2)}"
-    else:
-        m13 = re.search(r"Matricule s\.?s\.?\s+(\d{13})", joined)
-        matricule = m13.group(1) if m13 else None
+    # key is deterministic (97 - NIR mod 97). On this scan the NIR and its
+    # key are split across lines by an intervening OCR line ("Section 0099"),
+    # so allow anything between them, then validate: the key is only appended
+    # when it satisfies the check, which both confirms the OCR read of the
+    # NIR and proves the two fragments belong together. If it doesn't check
+    # out, keep the 13 digits alone (not guessed).
+    m_nir = re.search(r"Matricule s\.?s\.?\s+(\d{13})", joined)
+    matricule = None
+    if m_nir:
+        nir = m_nir.group(1)
+        expected_key = f"{97 - (int(nir) % 97):02d}"
+        # Look for that exact 2-digit key standing alone anywhere after the
+        # NIR (it's on its own OCR line here).
+        if re.search(rf"(?m)^{expected_key}$", joined[m_nir.end():]):
+            matricule = f"{nir} {expected_key}"
+        else:
+            matricule = nir
     fields.append(("Matricule sécurité sociale", matricule))
 
     # Bank details (RIB), split into its four standard parts. The block
@@ -129,28 +183,59 @@ def _extract_contract_block(joined: str) -> list[tuple[str, str | None]]:
     add("N° de compte", r"n[°ºo]?\s*cpte\s+(\S+)")
     add("Clé RIB", r"n[°ºo]?\s*cpte\s+\S+\s+(\d{2})\b")
 
-    add("Domiciliation", r"Domiciliation\s+(.+)")
+    # Domiciliation: the bank name only. The worker's street sits at the same
+    # page height and is glued on the right by the flattening, so cut the
+    # capture at the first street pattern ("<n> [bis] rue/av ...").
+    m = re.search(r"Domiciliation\s+(.+)", joined)
+    if m:
+        domiciliation = re.split(
+            r"\s+(?=\d+\s+(?:bis\s+)?(?:rue|av|avenue|bd|boulevard|impasse|place|chemin)\b)",
+            m.group(1),
+        )[0].strip()
+    else:
+        domiciliation = None
+    fields.append(("Domiciliation", domiciliation))
 
     return fields
 
 
 def _extract_worker_identity_block(joined: str) -> list[tuple[str, str | None]]:
-    # Worker name and street only. Both the civility line ("M COUTANT
-    # PIERRE") and the street line right after it read reliably. The postal
-    # code / city line does NOT: it sits at the same page height as the
-    # RTT/Congés table on the left, so flattening glues them together and
-    # OCR mangles the result ("eo ORÉEANS") - not extracted (not guessed).
+    # Worker name and address. The civility line ("M COUTANT PIERRE") and the
+    # street line ("27 bis rue du Faubourg St Jean", glued onto the
+    # Domiciliation line) read reliably; the postal-code / city line
+    # ("45000 ORLEANS") sits at the same page height as the RTT/Congés grid
+    # and is glued onto one of its lines ("collaborateur | employeur 45000
+    # ORLEANS"), but a "<cp> <VILLE>" pattern still recovers it.
     #
     # The "M"/"Mme" civility anchor is intentionally weak but safe here: the
     # "Matricule" line above is already consumed and no other line starts
     # with a bare "M". Revisit this anchor if it ever captures the wrong line.
     fields = []
 
-    m = re.search(r"^M\.?\s+(.+)$", joined, re.MULTILINE)
-    fields.append(("Nom travailleur", m.group(1).strip() if m else None))
+    m = re.search(r"^M(?:me)?\.?\s+([A-ZÉÈ].+)$", joined, re.MULTILINE)
+    name = m.group(1).strip() if m else None
+    fields.append(("Nom travailleur", name))
 
-    m = re.search(r"^M\.?\s+.+\n(.+)$", joined, re.MULTILINE)
-    fields.append(("Adresse travailleur", m.group(1).strip() if m else None))
+    # Street: glued to the end of the "Domiciliation ..." line. The employer
+    # street ("2 avenue de Paris") matches the same pattern higher up, so
+    # take the LAST match - the worker block is below the employer block in
+    # reading order.
+    streets = re.findall(
+        r"(\d+\s+(?:bis\s+)?(?:rue|av|avenue|bd|boulevard|impasse|place|chemin)\b[^\n]*)",
+        joined,
+        re.IGNORECASE,
+    )
+    street = streets[-1].strip() if streets else None
+
+    # City: first "<5-digit cp> <VILLE>" that isn't the employer's own line.
+    # The employer city ("45000 ORLEANS") also matches, so take the *last*
+    # such occurrence - the worker block is below the employer block in
+    # reading order.
+    cities = re.findall(r"\b(\d{5}\s+[A-ZÉÈ][^\n]*)", joined)
+    city = cities[-1].strip() if cities else None
+
+    address = " ".join(p for p in (street, city) if p) or None
+    fields.append(("Adresse travailleur", address))
 
     return fields
 
@@ -158,7 +243,7 @@ def _extract_worker_identity_block(joined: str) -> list[tuple[str, str | None]]:
 # --- totals / cumuls block (bottom-right grid) ------------------------------
 #
 # A three-part grid at the bottom of the page, heavily mangled by OCR:
-#   - hours worked (Période / Année)
+#   - hours worked (Période / Année) and overtime hours (0,00 here)
 #   - a 5-column cumul table (Brut fiscal / Base SS / Charges patronales /
 #     Charges salariales / Net imposable) with two rows: Période and Année
 #   - the Net à payer
@@ -169,8 +254,9 @@ def _extract_worker_identity_block(joined: str) -> list[tuple[str, str | None]]:
 #     (période, année), the 5 Période cumuls, then the Net à payer.
 #   - the last line of the block carries the 5 Année cumuls as its last 5
 #     numbers (leading OCR junk / heures supp. varies and is ignored).
-# Heures supplémentaires are not extracted: always 0,00 here and their OCR
-# form is unreadable ("Homes supe'", "o00 ooo") - accepted, not guessed.
+# Overtime hours ("Heures supp.") are always 0,00 on this template and their
+# OCR line is unreadable ("Pore o00 ooo"), so they're emitted as a fixed
+# 0,00 rather than parsed (documented, not guessed).
 
 CUMUL_COLUMNS = [
     "Brut fiscal", "Base sécurité sociale", "Charges patronales",
@@ -180,12 +266,13 @@ CUMUL_COLUMNS = [
 
 def _extract_totals_block(joined: str) -> list[tuple[str, str | None]]:
     # All fields here are bulletin-level totals: their labels are prefixed
-    # "Synthèse ..." on the way out (see the return below).
+    # "Synthèse ..." on the way out (see extract_earnings_table).
     empty = (
         [("Heures travaillées (période)", None), ("Heures travaillées (année)", None)]
         + [(f"{c} (période)", None) for c in CUMUL_COLUMNS]
         + [(f"{c} (année)", None) for c in CUMUL_COLUMNS]
         + [("Net à payer", None)]
+        + [("Heures supp. (période)", "0,00"), ("Heures supp. (année)", "0,00")]
     )
 
     lines = joined.splitlines()
@@ -212,8 +299,49 @@ def _extract_totals_block(joined: str) -> list[tuple[str, str | None]]:
         fields.append((f"{col} (année)", value))
     fields.append(("Net à payer", head[7]))
 
+    # Overtime hours: fixed 0,00 (see block comment above).
+    fields.append(("Heures supp. (période)", "0,00"))
+    fields.append(("Heures supp. (année)", "0,00"))
+
     return fields
-    # (each label prefixed "Synthèse — ..." to match the app's field display)
+
+
+# --- top RTT / Congés grid --------------------------------------------------
+#
+# A small grid at the top of the payslip: three counters (RTT collaborateur,
+# RTT employeur, Congés) each with Pris / Solde / Acquis rows, plus a "Dates
+# de congés" column that is empty here. The grid is OCR'd as three data rows
+# keyed "Pris" / "Solde" / "Acquis", each carrying three "0,00" values in
+# column order (RTT collab, RTT employeur, Congés). The "Dates de congés"
+# cells are blank ("Du au") and emitted as None. If the grid isn't found,
+# nothing is emitted (not guessed).
+
+_RTT_COLUMNS = ["RTT collaborateur", "RTT employeur", "Congés"]
+_RTT_ROWS = [("Pris", "pris"), ("Solde", "solde"), ("Acquis", "acquis")]
+
+
+def _extract_rtt_block(joined: str) -> list[tuple[str, str | None]]:
+    fields = []
+    found_any = False
+    for row_label, row_fr in _RTT_ROWS:
+        m = re.search(rf"(?m)^{row_label}\s+(.+)$", joined)
+        values = NUMBER_RE.findall(m.group(1)) if m else []
+        if m:
+            found_any = True
+        for col, value in zip(_RTT_COLUMNS, values[:3]):
+            fields.append((f"{col} ({row_fr})", value if value else None))
+        # Pad missing columns with None so the grid shape is stable.
+        for col in _RTT_COLUMNS[len(values[:3]):]:
+            fields.append((f"{col} ({row_fr})", None))
+
+    if not found_any:
+        return []
+
+    # Dates de congés column: blank on this template.
+    for _, row_fr in _RTT_ROWS:
+        fields.append((f"Dates de congés ({row_fr})", None))
+
+    return fields
 
 
 # --- "Désignation" earnings table -------------------------------------------
@@ -230,11 +358,13 @@ def _extract_totals_block(joined: str) -> list[tuple[str, str | None]]:
 #     (salariale) gets the "(sal)" suffix, the right one (patronale)
 #     "(patr)" - this is the one case where the sal/patr split can be told
 #     apart from flattened text (by pair order = layout order). A line with
-#     a single pair can't: its retenue could be either part, so no suffix.
+#     a single pair CANNOT be split: its retenue could be either part, so no
+#     suffix is added (kept honest - the visual column is lost in the OCR
+#     flattening and is not reconstructed from coordinates here).
 #   - Gain lines (indemnités, primes, gratifications) don't satisfy the
-#     cotisation invariant. Their trailing amount is the "Gain (sal)"
-#     column; any leading numbers stay numbered ("Montant N") because
-#     Nombre vs Base can't be told apart reliably from flattened text.
+#     cotisation invariant. Their amounts stay numbered ("Montant N")
+#     because Nombre/Base/Gain can't be told apart reliably from flattened
+#     text once empty cells collapse.
 #
 # Section anchor: "Domiciliation" is the last reliable label before the
 # table (the table's own OCR'd header row is too mangled to anchor on).
@@ -242,17 +372,39 @@ def _extract_totals_block(joined: str) -> list[tuple[str, str | None]]:
 NUMBER_RE = re.compile(r"-?\d{1,3}(?:[ .]\d{3})*,\d{2,3}|\d+,\d{2,3}")
 # OCR renders the column separator as a literal "|" on some rows and as
 # plain whitespace on others - both accepted between the code and the rest.
-# A code is 1-4 digits NOT immediately followed by another digit or "/",
-# so a detail date line ("09/05/14") isn't mistaken for a code. The
-# trailing (?![\d/]) anchors on the whole leading number: it forbids the
-# regex from backtracking to a shorter digit run (matching "0" out of "09").
-CODE_LINE_RE = re.compile(r"^(\d{1,4})(?![\d/])\s*\|?\s*(.*)$")
+# The code itself may also be wrapped in "|...|" (e.g. "|5620|"), so an
+# optional leading "|" is allowed before it. A code is 1-4 digits NOT
+# immediately followed by another digit or "/", so a detail date line
+# ("09/05/14") isn't mistaken for a code. The trailing (?![\d/]) anchors on
+# the whole leading number: it forbids the regex from backtracking to a
+# shorter digit run (matching "0" out of "09").
+CODE_LINE_RE = re.compile(r"^\|?\s*(\d{1,4})(?![\d/])\s*\|?\s*(.*)$")
 # A code-less detail line whose content starts like a date (dd/mm/yy).
 DATE_DETAIL_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{2,4}\b")
 
 INVARIANT_TOLERANCE = 0.015  # euro: retenue vs base*taux/100, absorbs cents rounding
 
 SUMMARY_LABELS = ["Total Brut", "Total Cotisations"]
+
+# Characters OCR leaves stuck to the edges of a rubric label ("[Prime",
+# "stag. ) )", "[Formation"). Stripped from both ends; internal punctuation
+# in genuine labels (e.g. "C.S.G.", "A.F.") is kept.
+_LABEL_EDGE_CHARS = "[]|()"
+
+
+def _clean_label(label: str) -> str:
+    """Strip stray OCR bracket/pipe/paren noise from a rubric label's edges
+    and collapse whitespace. Internal punctuation is preserved."""
+    label = " ".join(label.split())
+    # Remove edge noise tokens ("]", ")", "[", "|", "( )") repeatedly.
+    changed = True
+    while changed and label:
+        changed = False
+        stripped = label.strip(_LABEL_EDGE_CHARS + " ")
+        if stripped != label:
+            label = stripped
+            changed = True
+    return label.strip()
 
 
 def _to_float(s: str) -> float:
@@ -302,12 +454,13 @@ def _name_cotisation_line(nums: list[str]) -> list[tuple[str, str]] | None:
 
 def _parse_table_line(code: str, rest: str) -> list[tuple[str, str, str]]:
     nums = NUMBER_RE.findall(rest)
-    # Label: everything that isn't a number or the stray "|" separator.
-    label = " ".join(NUMBER_RE.sub(" ", rest).replace("|", " ").split())
+    # Label: everything that isn't a number, once stray OCR edge noise is
+    # cleaned off.
+    label = _clean_label(NUMBER_RE.sub(" ", rest))
 
     results = []
     if label:
-        results.append((code, "Libellé", label))
+        results.append((code, "Désignation", label))
 
     named = _name_cotisation_line(nums)
     if named is not None:
@@ -330,29 +483,6 @@ def _strip_accents(s: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
 
 
-def _extract_summary_lines(lines: list[str]) -> list[tuple[str, str, str | None]]:
-    """The two inline subtotals of the earnings table (Total Brut, Total
-    Cotisations), returned as (label, value) pairs. "Total Cotisations"
-    carries two values (part salariale then patronale, left-to-right layout
-    order) -> "Total Cotisations (sal)" / "Total Cotisations (patr)"."""
-    section = "\n".join(lines)
-    section_norm = _strip_accents(section)
-    results = []
-    for label in SUMMARY_LABELS:
-        m = re.search(re.escape(_strip_accents(label)) + r"\s+(.+)", section_norm)
-        if not m:
-            results.append((label, "Montant", None))
-            continue
-        values = NUMBER_RE.findall(m.group(1))
-        if len(values) <= 1:
-            results.append((label, "Montant", values[0] if values else None))
-        else:
-            # Two values = part salariale then patronale (left-to-right layout).
-            results.append((label, "Montant (sal)", values[0]))
-            results.append((label, "Montant (patr)", values[1]))
-    return results
-
-
 def extract_earnings_table(text: str):
     """Extract the "Désignation" earnings table from the flattened text.
 
@@ -360,12 +490,14 @@ def extract_earnings_table(text: str):
       - table_lines: (code, column, value) - one entry per non-empty cell.
         Cotisation lines (validated by the Retenue = Base*Taux/100 invariant)
         get named columns (Base / Taux / Retenue, with (sal)/(patr) suffixes
-        when both parts are present). Any other line's amounts are numbered
-        ("Montant N") - gain vs retenue can't be told apart from flattened
-        text. Code-less detail rows (absence dates) attach to the code above
-        as "Détail" cells.
-      - summary_lines: ("Synthèse", label, value) for Total Brut / Total
-        Cotisations (the latter split into "... 1"/"... 2" = sal/patr).
+        only when both parts are present on the line). Any other line's
+        amounts are numbered ("Montant N") - gain vs retenue can't be told
+        apart from flattened text. The two inline subtotals (Total Brut,
+        Total Cotisations) are emitted as ordinary rows keyed on their label.
+        The bottom totals grid is appended keyed "Synthèse", and the top
+        RTT/Congés grid is appended keyed on its counter/column labels.
+      - summary_lines: always [] (subtotals are kept inline as normal rows,
+        matching the other templates' public shape).
     Returns ([], []) if the table isn't found.
     """
     lines = [line.strip() for line in text.splitlines() if line.strip()]
@@ -391,23 +523,31 @@ def extract_earnings_table(text: str):
     for line in section_lines:
         # "Total Brut" / "Total Cotisations": ordinary table rows whose N°
         # column is empty. Keyed on their own label (like a code), with the
-        # amount(s) after them. Total Cotisations carries two values
-        # (salariale then patronale, left-to-right layout order).
+        # amount(s) after them.
         total_label = next(
             (lbl for lbl in SUMMARY_LABELS
              if _strip_accents(line).lower().startswith(_strip_accents(lbl).lower())),
             None,
         )
         if total_label is not None:
-            # Amounts after the label: decimals ("5,22") or bare integers
-            # ("234", OCR having dropped the comma - kept as-is). Two values
-            # = retenue salariale then patronale (left-to-right layout).
-            values = re.findall(r"-?\d{1,3}(?:[ .]\d{3})*,\d{2,3}|\d+", line[len(total_label):])
-            if len(values) <= 1:
-                table_lines.append((total_label, "Montant", values[0] if values else None))
-            else:
-                table_lines.append((total_label, "Montant (sal)", values[0]))
-                table_lines.append((total_label, "Montant (patr)", values[1]))
+            rest = line[len(total_label):]
+            # Amounts after the label: decimals ("5,22") or a bare integer
+            # ("234", OCR having dropped the comma).
+            values = re.findall(r"-?\d{1,3}(?:[ .]\d{3})*,\d{2,3}|\d+", rest)
+            if total_label == "Total Brut":
+                # Single value: the brut gain (part salariale).
+                table_lines.append(
+                    ("Total Brut", "Gain (sal)", values[0] if values else None)
+                )
+            else:  # Total Cotisations: retenue salariale then patronale.
+                if len(values) <= 1:
+                    table_lines.append(
+                        ("Total Cotisations", "Retenue (sal)",
+                         values[0] if values else None)
+                    )
+                else:
+                    table_lines.append(("Total Cotisations", "Retenue (sal)", values[0]))
+                    table_lines.append(("Total Cotisations", "Retenue (patr)", values[1]))
             last_code = None
             continue
 
@@ -418,16 +558,37 @@ def extract_earnings_table(text: str):
             continue
         # Code-less line following a coded one. Only genuine detail rows are
         # attached: the individual absence dates ("09/05/14", "19/05/14
-        # (0,5)") under a code like 650. Anything else (the totals grid
-        # header, OCR noise, the legal footer) is NOT rubric detail and is
-        # ignored - matching a date pattern is the gate.
+        # (0,5)") under a code. Anything else (the totals grid header, OCR
+        # noise, the legal footer) is NOT rubric detail and is ignored -
+        # matching a date pattern is the gate.
         if last_code is not None and DATE_DETAIL_RE.match(line):
             table_lines.append((last_code, "Détail", line.strip()))
 
+    joined = "\n".join(lines)
+
+    # Top RTT / Congés grid, appended so the app can render it with the rest.
+    for label, value in _extract_rtt_block(joined):
+        table_lines.append((_rtt_key(label), _rtt_col(label), value))
+
     # Bulletin totals (hours, cumuls, Net à payer) go at the very end, as
-    # ordinary table rows so the app renders them below the table - keyed
-    # on "Synthèse" with the field name as the column.
-    for label, value in _extract_totals_block(text):
+    # ordinary rows keyed on "Synthèse" with the field name as the column.
+    for label, value in _extract_totals_block(joined):
         table_lines.append(("Synthèse", label, value))
 
     return table_lines, []
+
+
+# --- RTT grid key/column helpers --------------------------------------------
+#
+# _extract_rtt_block yields ("<Column> (<row>)", value) pairs; the earnings
+# table wants (key, column, value) triples. Split the composite label back
+# into its counter name (the key) and its row (the column) so the app groups
+# the three counters as rows the way it groups rubric codes.
+
+def _rtt_key(label: str) -> str:
+    return re.sub(r"\s*\([^)]*\)\s*$", "", label).strip()
+
+
+def _rtt_col(label: str) -> str:
+    m = re.search(r"\(([^)]*)\)\s*$", label)
+    return m.group(1) if m else label

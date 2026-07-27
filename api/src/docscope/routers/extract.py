@@ -12,6 +12,8 @@ from docscope.services.extraction import (
     extract_delvaux,
     extract_mosica,
     extract_pdf_text,
+    extract_ricoh,
+    extract_sitti,
     extract_ucm,
 )
 
@@ -25,6 +27,8 @@ EXTRACTORS = {
     "delvaux": extract_delvaux,
     "apside": lambda content: extract_apside(extract_pdf_text(content)),
     "mosica": lambda content: extract_mosica(extract_pdf_text(content)),
+    "ricoh": lambda content: extract_ricoh(extract_pdf_text(content)),
+    "sitti": lambda content: extract_sitti(extract_pdf_text(content)),
 }
 
 

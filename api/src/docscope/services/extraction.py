@@ -11,7 +11,7 @@ import pdfplumber
 import pytesseract
 from PIL import Image
 
-from docscope.services.models import apside, delvaux, mosica, ucm
+from docscope.services.models import apside, delvaux, mosica, ricoh, sitti, ucm
 
 
 def extract_pdf_text(content: bytes) -> str:
@@ -108,6 +108,56 @@ def extract_mosica(text: str) -> dict:
     ]
 
     table, summary = mosica.extract_earnings_table(text)
+    table_json = [
+        {"ligne": code, "colonne": column, "valeur": value}
+        for code, column, value in table
+    ]
+    summary_json = [
+        {"intitule": label, "valeur": value} for _, label, value in summary
+    ]
+
+    return {
+        "text": text,
+        "champs": fields,
+        "tableau": table_json,
+        "synthese": summary_json,
+    }
+
+
+def extract_ricoh(text: str) -> dict:
+    """Run Ricoh field + earnings table extraction and shape the result
+    for the API response."""
+    fields = [
+        {"intitule": label, "valeur": value}
+        for label, value in ricoh.extract_fields(text)
+    ]
+
+    table, summary = ricoh.extract_earnings_table(text)
+    table_json = [
+        {"ligne": code, "colonne": column, "valeur": value}
+        for code, column, value in table
+    ]
+    summary_json = [
+        {"intitule": label, "valeur": value} for _, label, value in summary
+    ]
+
+    return {
+        "text": text,
+        "champs": fields,
+        "tableau": table_json,
+        "synthese": summary_json,
+    }
+
+
+def extract_sitti(text: str) -> dict:
+    """Run Sitti field + earnings table extraction and shape the result
+    for the API response."""
+    fields = [
+        {"intitule": label, "valeur": value}
+        for label, value in sitti.extract_fields(text)
+    ]
+
+    table, summary = sitti.extract_earnings_table(text)
     table_json = [
         {"ligne": code, "colonne": column, "valeur": value}
         for code, column, value in table

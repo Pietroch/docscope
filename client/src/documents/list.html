@@ -43,6 +43,16 @@
         tbody tr:hover {
             background: #f5f5f5;
         }
+
+        .badge-complete {
+            display: inline-block;
+            padding: 0.1rem 0.5rem;
+            border-radius: 3px;
+            font-size: 0.8rem;
+            background: #e6f4ea;
+            color: #1e7e34;
+            border: 1px solid #b7dfc3;
+        }
     </style>
 </head>
 
@@ -66,6 +76,7 @@
                 <th data-field="type">Type</th>
                 <th data-field="template">Modèle</th>
                 <th data-field="date">Date</th>
+                <th data-field="validated">Statut</th>
             </tr>
         </thead>
         <tbody id="documents-body"></tbody>
@@ -129,6 +140,7 @@
                     <td>${doc.type}</td>
                     <td>${doc.template}</td>
                     <td>${doc.date}</td>
+                    <td>${doc.validated ? '<span class="badge-complete">Complet</span>' : ""}</td>
                 `;
                 row.addEventListener("click", () => {
                     location.href = `detail.html?id=${doc.id}`;

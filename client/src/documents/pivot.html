@@ -1,0 +1,598 @@
+<!-- client/src/documents/pivot.html -->
+
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <title>docscope — analyse pivot</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 1400px;
+            margin: 2rem auto;
+        }
+
+        .filters {
+            display: flex;
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        .hint {
+            color: #666;
+            font-style: italic;
+        }
+
+        .legend {
+            display: flex;
+            gap: 1.5rem;
+            margin: 1rem 0;
+            font-size: 0.85rem;
+        }
+
+        .legend .swatch {
+            display: inline-block;
+            width: 0.9rem;
+            height: 0.9rem;
+            margin-right: 0.3rem;
+            vertical-align: middle;
+            border: 1px solid #999;
+        }
+
+        .pivot-group {
+            margin-bottom: 2.5rem;
+        }
+
+        .pivot-group h2 {
+            font-size: 1.05rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .export-btn {
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+
+        .summaries {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2rem;
+            margin-top: 1rem;
+        }
+
+        .constants {
+            font-size: 0.8rem;
+        }
+
+        .constants summary {
+            cursor: pointer;
+            color: #666;
+        }
+
+        .titles-list {
+            margin: 0.4rem 0 0;
+            padding-left: 1.2rem;
+        }
+
+        .table-scroll {
+            overflow-x: auto;
+        }
+
+        table {
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+
+        th,
+        td {
+            border: 1px solid #ccc;
+            padding: 0.3rem 0.5rem;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        th.corner {
+            position: sticky;
+            left: 0;
+            background: #fff;
+        }
+
+        td.rowhead {
+            position: sticky;
+            left: 0;
+            background: #fff;
+            font-weight: bold;
+        }
+
+        td.missing {
+            background: #eee;
+        }
+
+        th.mismatch {
+            background: #ffe0b2;
+        }
+    </style>
+</head>
+
+<body>
+    <a href="../index.html">&larr; Accueil</a>
+    <h1>docscope — analyse pivot</h1>
+
+    <div class="filters">
+        <select id="filter-company"></select>
+        <select id="filter-person"></select>
+    </div>
+
+    <div class="legend">
+        <span><span class="swatch" style="background:#eee"></span>Attribut absent de ce bulletin</span>
+        <span><span class="swatch" style="background:#ffe0b2"></span>Désignation différente d'un bulletin à l'autre
+            (survolez l'en-tête pour voir les variantes)</span>
+    </div>
+
+    <div id="pivots"></div>
+
+    <script src="../vendor/exceljs.min.js"></script>
+    <script>
+        const filterCompany = document.getElementById("filter-company");
+        const filterPerson = document.getElementById("filter-person");
+        const pivotsBox = document.getElementById("pivots");
+
+        // Attribute names used across templates for a rubric line's label
+        // (apside/sitti: "Désignation", mosica/ucm/ricoh: "Libellé", delvaux:
+        // "Rubrique"). Add here when a future template introduces a new one -
+        // nothing else in this page is template-specific.
+        const DESIGNATION_ATTRS = ["Désignation", "Libellé", "Rubrique"];
+
+        // Rubric line groups: "<code> — <attr>" or "<Total ...> — <attr>",
+        // same convention as the backend's own _TABLE_LINE_RE (documents.py).
+        // Only these get their attributes reordered and their Désignation
+        // folded into the header - other labels (Synthèse, RTT/Congés,
+        // plain fields) keep their own single column, as before.
+        const TABLE_GROUP_RE = /^(\d+|Total Brut|Total Cotisations) — (.+)$/;
+
+        // Canonical attribute order within a rubric line, independent of
+        // whatever order the extraction happened to store them in (field
+        // arrival order can be scrambled - see apside.py's own notes on
+        // out-of-sequence OCR lines). Désignation isn't listed: it names the
+        // group instead of being its own column. Unknown attributes (a
+        // future template's own naming) sort after the known ones.
+        const ATTR_ORDER = ["Nombre", "Base", "Taux (sal)", "Gain (sal)",
+            "Retenue (sal)", "Taux (patr)", "Retenue (patr)", "Détail"];
+        const attrRank = (attr) => {
+            const i = ATTR_ORDER.indexOf(attr);
+            return i === -1 ? ATTR_ORDER.length : i;
+        };
+
+        // A cell only ever becomes a real Excel number when it's shaped
+        // exactly like a French decimal amount (comma mandatory). Bare digit
+        // runs (SIRET, matricule, RIB parts, postal codes) never match -
+        // converting a comma-less identifier to a float would lose leading
+        // zeros or precision, which is worse than leaving it as text.
+        const FR_NUMBER_RE = /^-?(?:\d{1,3}(?:[ .]\d{3})*|\d+),(\d{1,3})$/;
+        const parseFrNumber = (text) => {
+            const m = FR_NUMBER_RE.exec(text);
+            if (!m) return null;
+            return { value: parseFloat(text.replace(/[ .]/g, "").replace(",", ".")), decimals: m[1].length };
+        };
+
+        let documents = [];
+
+        const fillFilter = (select, values) => {
+            const previous = select.value;
+            select.innerHTML = '<option value="">— choisir —</option>' +
+                [...new Set(values)].sort().map((v) => `<option value="${v}">${v}</option>`).join("");
+            select.value = previous;
+        };
+
+        const escapeHtml = (s) => String(s)
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+        // Collapses whitespace variants (regular vs. non-breaking space,
+        // stray runs) and unicode compatibility forms before a label is used
+        // as a grouping/dedup key - two labels that only differ this way
+        // (e.g. an OCR artifact) must land in the same column, not two.
+        const normalizeLabel = (label) => label.normalize("NFKC").replace(/\s+/g, " ").trim();
+
+        // Turns a set of documents (same template) into the pivot's data
+        // model: the ordered visible columns, one row per bulletin, the
+        // "identical everywhere" columns pulled out separately, and the
+        // actual grid of cells. This is the single source of truth for both
+        // the on-screen table and the Excel export, so the two can't drift
+        // apart the way the on-screen table and the export used to.
+        function buildPivotModel(docs, fieldsByDocId) {
+            const rows = [...docs].sort((a, b) => a.date.localeCompare(b.date));
+
+            // Per document: normalized label -> array of raw values. Several
+            // values happen when the same label repeats for one document
+            // (e.g. two absence dates under one rubric's "Détail" attribute)
+            // - kept as a list and merged at render time instead of the last
+            // one silently overwriting the others.
+            const rawByDoc = new Map(rows.map((doc) => {
+                const map = new Map();
+                for (const f of fieldsByDocId.get(doc.id)) {
+                    const label = normalizeLabel(f.label);
+                    if (!map.has(label)) map.set(label, []);
+                    map.get(label).push(f.value);
+                }
+                return [doc.id, map];
+            }));
+
+            // Group discovery, oldest bulletin first. A "group" is either a
+            // rubric code / "Total ..." line (its attrs folded under one
+            // header) or a standalone label (its own single column).
+            const groupOrder = [];
+            const groupIsTable = new Map();
+            const groupAttrs = new Map(); // table groups only: Set(attr)
+            for (const doc of rows) {
+                for (const label of rawByDoc.get(doc.id).keys()) {
+                    const m = label.match(TABLE_GROUP_RE);
+                    const groupKey = m ? m[1] : label;
+                    if (!groupOrder.includes(groupKey)) {
+                        groupOrder.push(groupKey);
+                        groupIsTable.set(groupKey, !!m);
+                        if (m) groupAttrs.set(groupKey, new Set());
+                    }
+                    if (m && !DESIGNATION_ATTRS.includes(m[2])) groupAttrs.get(groupKey).add(m[2]);
+                }
+            }
+
+            // A table group's display name: its Désignation value(s) across
+            // every bulletin. More than one distinct value = likely a
+            // recopying/OCR slip (a rubric's wording doesn't move month to
+            // month) - kept visible (joined) and flagged, not hidden.
+            const designationsOf = (groupKey) => {
+                const values = new Set();
+                for (const attr of DESIGNATION_ATTRS) {
+                    for (const doc of rows) {
+                        for (const v of rawByDoc.get(doc.id).get(`${groupKey} — ${attr}`) || []) {
+                            if (v) values.add(v);
+                        }
+                    }
+                }
+                return [...values];
+            };
+
+            // Flatten groups into the ordered column list.
+            const columns = [];
+            for (const groupKey of groupOrder) {
+                if (!groupIsTable.get(groupKey)) {
+                    columns.push({ key: groupKey, header: groupKey, attr: null });
+                    continue;
+                }
+                const designations = designationsOf(groupKey);
+                const mismatch = designations.length > 1;
+                const header = designations.length === 0 ? groupKey : `${groupKey} — ${designations.join(" / ")}`;
+                const attrs = [...groupAttrs.get(groupKey)].sort((a, b) => attrRank(a) - attrRank(b));
+                for (const attr of attrs) {
+                    columns.push({ key: `${groupKey} — ${attr}`, header, subHeader: attr, group: groupKey, mismatch });
+                }
+            }
+
+            const cellValues = (doc, col) => rawByDoc.get(doc.id).get(col.key) || [];
+
+            // Every column stays in the grid, no exceptions - this table is
+            // the whole bulletin, identical values and all. In parallel,
+            // classify each column's title as "identical" (same value, or
+            // same absence, on every bulletin) or "different" - two plain
+            // indicator lists rendered after the table, titles only.
+            const visibleColumns = [];
+            const identicalTitles = [];
+            const differentTitles = [];
+            for (const col of columns) {
+                const perDocText = rows.map((doc) => {
+                    const raw = cellValues(doc, col);
+                    if (raw.length === 0) return null; // label absent for this bulletin
+                    const nonEmpty = raw.filter((v) => v != null && v !== "");
+                    return nonEmpty.length ? nonEmpty.join("; ") : ""; // "" = present but null in db
+                });
+                const label = col.subHeader ? `${col.header} — ${col.subHeader}` : col.header;
+                const identical = perDocText.every((t) => t === perDocText[0]);
+                (identical ? identicalTitles : differentTitles).push(label);
+                visibleColumns.push(col);
+            }
+
+            // Final grid: one row per bulletin, one cell per visible column.
+            const grid = rows.map((doc) => visibleColumns.map((col) => {
+                const raw = cellValues(doc, col);
+                if (raw.length === 0) return { missing: true, text: "" };
+                const values = raw.filter((v) => v != null && v !== "");
+                return { missing: false, text: values.join("; ") };
+            }));
+
+            return { rows, visibleColumns, identicalTitles, differentTitles, grid };
+        }
+
+        // Walks the visible columns once, grouping consecutive attr columns
+        // that share the same rubric group (for a colspan-style header).
+        // Calls onGroup(col, span, startIndex) once per header block and
+        // onPlain(col, index) once per standalone column, in column order.
+        function walkHeaderGroups(visibleColumns, onGroup, onPlain) {
+            let i = 0;
+            while (i < visibleColumns.length) {
+                const col = visibleColumns[i];
+                if (col.attr === null) {
+                    onPlain(col, i);
+                    i += 1;
+                    continue;
+                }
+                let span = 1;
+                while (i + span < visibleColumns.length && visibleColumns[i + span].group === col.group) span += 1;
+                onGroup(col, span, i);
+                i += span;
+            }
+        }
+
+        function renderHtml(model) {
+            const { rows, visibleColumns, identicalTitles, differentTitles, grid } = model;
+
+            const headRow1 = [`<th class="corner" rowspan="2">Date</th>`];
+            const headRow2 = [];
+            walkHeaderGroups(visibleColumns,
+                (col, span, i) => {
+                    const cls = col.mismatch ? ' class="mismatch"' : "";
+                    const title = col.mismatch ? ' title="Désignations différentes selon les bulletins"' : "";
+                    headRow1.push(`<th colspan="${span}"${cls}${title}>${escapeHtml(col.header)}</th>`);
+                    for (let j = 0; j < span; j++) {
+                        headRow2.push(`<th>${escapeHtml(visibleColumns[i + j].subHeader)}</th>`);
+                    }
+                },
+                (col) => headRow1.push(`<th rowspan="2">${escapeHtml(col.header)}</th>`)
+            );
+
+            const bodyRows = rows.map((doc, r) => {
+                const cells = grid[r].map((cell) =>
+                    cell.missing ? '<td class="missing"></td>' : `<td>${escapeHtml(cell.text)}</td>`
+                ).join("");
+                return `<tr><td class="rowhead">${escapeHtml(doc.date)}</td>${cells}</tr>`;
+            }).join("");
+
+            // Two plain indicator lists, titles only - shown after the
+            // table, not instead of any part of it.
+            const titleList = (titles) => `<ul class="titles-list">
+                ${titles.map((label) => `<li>${escapeHtml(label)}</li>`).join("")}
+            </ul>`;
+            const identicalHtml = identicalTitles.length === 0 ? "" : `
+                <details class="constants">
+                    <summary>${identicalTitles.length} champ(s) identique(s) sur tous les bulletins (repliés)</summary>
+                    ${titleList(identicalTitles)}
+                </details>`;
+            const differentHtml = differentTitles.length === 0 ? "" : `
+                <details class="constants">
+                    <summary>${differentTitles.length} champ(s) différent(s) d'un bulletin à l'autre (repliés)</summary>
+                    ${titleList(differentTitles)}
+                </details>`;
+
+            return `
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>${headRow1.join("")}</tr>
+                            <tr>${headRow2.join("")}</tr>
+                        </thead>
+                        <tbody>${bodyRows}</tbody>
+                    </table>
+                </div>
+                <div class="summaries">${identicalHtml}${differentHtml}</div>`;
+        }
+
+        // --- Excel export (ExcelJS, vendored - see client/src/vendor) ------
+        // A real .xlsx: numbers are stored as actual floats (locale-proof,
+        // summable, readable by pandas.read_excel()) with a number format
+        // that preserves the source's original decimal count; everything
+        // else (dates, addresses, joined duplicates, identifiers) stays
+        // text untouched. Same model as the on-screen table, so the export
+        // can't silently diverge from what's displayed.
+
+        const THIN_BORDER = { style: "thin", color: { argb: "FFCCCCCC" } };
+        const CELL_BORDER = { top: THIN_BORDER, left: THIN_BORDER, bottom: THIN_BORDER, right: THIN_BORDER };
+        const FILL_MISSING = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEEEEE" } };
+        const FILL_MISMATCH = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFE0B2" } };
+
+        const styleHeaderCell = (cell, mismatch) => {
+            cell.font = { bold: true };
+            cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+            cell.border = CELL_BORDER;
+            if (mismatch) cell.fill = FILL_MISMATCH;
+        };
+
+        const setCellValue = (cell, text) => {
+            const parsed = parseFrNumber(text);
+            if (parsed) {
+                cell.value = parsed.value;
+                cell.numFmt = `#,##0.${"0".repeat(parsed.decimals)}`;
+            } else if (text) {
+                cell.value = text;
+            }
+            cell.border = CELL_BORDER;
+        };
+
+        async function downloadExcel(model, meta, filename) {
+            const workbook = new ExcelJS.Workbook();
+            const sheet = workbook.addWorksheet("Pivot");
+            const nCols = 1 + model.visibleColumns.length;
+
+            sheet.mergeCells(1, 1, 1, nCols);
+            sheet.getCell(1, 1).value = document.title;
+            sheet.getCell(1, 1).font = { bold: true, size: 14 };
+
+            sheet.mergeCells(2, 1, 2, nCols);
+            sheet.getCell(2, 1).value =
+                `Entreprise : ${meta.company} — Employé : ${meta.person} — Modèle : ${meta.template}`;
+
+            sheet.getCell(4, 1).fill = FILL_MISSING;
+            sheet.mergeCells(4, 2, 4, nCols);
+            sheet.getCell(4, 2).value = "Attribut absent de ce bulletin";
+
+            sheet.getCell(5, 1).fill = FILL_MISMATCH;
+            sheet.mergeCells(5, 2, 5, nCols);
+            sheet.getCell(5, 2).value = "Désignation différente d'un bulletin à l'autre";
+
+            const headRow1 = 7;
+            const headRow2 = 8;
+            sheet.mergeCells(headRow1, 1, headRow2, 1);
+            styleHeaderCell(sheet.getCell(headRow1, 1));
+            sheet.getCell(headRow1, 1).value = "Date";
+
+            walkHeaderGroups(model.visibleColumns,
+                (col, span, i) => {
+                    const startCol = 2 + i;
+                    sheet.mergeCells(headRow1, startCol, headRow1, startCol + span - 1);
+                    const groupCell = sheet.getCell(headRow1, startCol);
+                    groupCell.value = col.header;
+                    styleHeaderCell(groupCell, col.mismatch);
+                    for (let j = 0; j < span; j++) {
+                        const subCell = sheet.getCell(headRow2, startCol + j);
+                        subCell.value = model.visibleColumns[i + j].subHeader;
+                        styleHeaderCell(subCell);
+                    }
+                },
+                (col, i) => {
+                    const startCol = 2 + i;
+                    sheet.mergeCells(headRow1, startCol, headRow2, startCol);
+                    const cell = sheet.getCell(headRow1, startCol);
+                    cell.value = col.header;
+                    styleHeaderCell(cell);
+                }
+            );
+
+            model.rows.forEach((doc, r) => {
+                const rowIdx = headRow2 + 1 + r;
+                const dateCell = sheet.getCell(rowIdx, 1);
+                dateCell.value = doc.date;
+                dateCell.font = { bold: true };
+                dateCell.border = CELL_BORDER;
+                model.grid[r].forEach((cellModel, ci) => {
+                    const cell = sheet.getCell(rowIdx, 2 + ci);
+                    if (cellModel.missing) {
+                        cell.fill = FILL_MISSING;
+                        cell.border = CELL_BORDER;
+                    } else {
+                        setCellValue(cell, cellModel.text);
+                    }
+                });
+            });
+
+            // Two plain indicator lists, titles only - after the table, not
+            // instead of any part of it (the grid above already has every
+            // column, identical values included).
+            let r = headRow2 + 1 + model.rows.length + 2;
+            if (model.identicalTitles.length) {
+                sheet.getCell(r, 1).value = "Champs identiques sur tous les bulletins";
+                sheet.getCell(r, 1).font = { bold: true };
+                r += 1;
+                for (const label of model.identicalTitles) {
+                    sheet.getCell(r, 1).value = label;
+                    r += 1;
+                }
+                r += 1;
+            }
+            if (model.differentTitles.length) {
+                sheet.getCell(r, 1).value = "Champs différents d'un bulletin à l'autre";
+                sheet.getCell(r, 1).font = { bold: true };
+                r += 1;
+                for (const label of model.differentTitles) {
+                    sheet.getCell(r, 1).value = label;
+                    r += 1;
+                }
+            }
+
+            sheet.getColumn(1).width = 12;
+            model.visibleColumns.forEach((col, i) => {
+                const header = col.subHeader || col.header;
+                sheet.getColumn(2 + i).width = Math.min(28, Math.max(10, header.length + 2));
+            });
+            sheet.views = [{ state: "frozen", xSplit: 1, ySplit: headRow2 }];
+
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], {
+                type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Filesystem-safe fragment for an export filename (accents stripped,
+        // anything else collapsed to "_").
+        const slug = (s) => s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+
+        async function renderPivots() {
+            const company = filterCompany.value;
+            const person = filterPerson.value;
+
+            if (!company || !person) {
+                pivotsBox.innerHTML = '<p class="hint">Sélectionnez une entreprise et un employé.</p>';
+                return;
+            }
+
+            const matching = documents.filter((d) => d.company === company && d.person === person);
+            if (matching.length === 0) {
+                pivotsBox.innerHTML = '<p class="hint">Aucun bulletin pour cette sélection.</p>';
+                return;
+            }
+
+            // One pivot table per template - labels are only comparable
+            // within the same template's field set.
+            const byTemplate = new Map();
+            for (const doc of matching) {
+                if (!byTemplate.has(doc.template)) byTemplate.set(doc.template, []);
+                byTemplate.get(doc.template).push(doc);
+            }
+
+            pivotsBox.innerHTML = '<p class="hint">Chargement...</p>';
+
+            const modelsByTemplate = new Map();
+            const sections = [];
+            for (const [template, docs] of byTemplate) {
+                const fieldsByDocId = new Map();
+                await Promise.all(docs.map(async (doc) => {
+                    const response = await fetch(`http://localhost:8000/documents/${doc.id}`);
+                    const data = await response.json();
+                    fieldsByDocId.set(doc.id, data.fields);
+                }));
+                const model = buildPivotModel(docs, fieldsByDocId);
+                modelsByTemplate.set(template, model);
+                sections.push(`
+                    <div class="pivot-group">
+                        <h2>Modèle : ${escapeHtml(template)}
+                            <button type="button" class="export-btn" data-template="${escapeHtml(template)}">
+                                Exporter vers Excel
+                            </button>
+                        </h2>
+                        ${renderHtml(model)}
+                    </div>`);
+            }
+
+            pivotsBox.innerHTML = sections.join("");
+
+            for (const button of pivotsBox.querySelectorAll(".export-btn")) {
+                button.addEventListener("click", () => {
+                    const template = button.dataset.template;
+                    const filename = `pivot_${slug(company)}_${slug(person)}_${slug(template)}.xlsx`;
+                    downloadExcel(modelsByTemplate.get(template), { company, person, template }, filename);
+                });
+            }
+        }
+
+        filterCompany.addEventListener("change", renderPivots);
+        filterPerson.addEventListener("change", renderPivots);
+
+        fetch("http://localhost:8000/documents")
+            .then((response) => response.json())
+            .then((data) => {
+                documents = data.documents;
+                fillFilter(filterCompany, documents.map((d) => d.company));
+                fillFilter(filterPerson, documents.map((d) => d.person));
+                renderPivots();
+            });
+    </script>
+</body>
+
+</html>

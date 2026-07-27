@@ -94,7 +94,8 @@ LEAVE_ROW_ORDER = ("pris", "solde", "acquis")
 
 def _blank_line():
     return {"num": "", "label": "", "nombre": "", "base": "", "tauxSal": "",
-            "gain": "", "retenueSal": "", "tauxPatr": "", "retenuePatr": ""}
+            "gain": "", "retenueSal": "", "tauxPatr": "", "retenuePatr": "",
+            "_details": []}
 
 
 def _blank_leave_row(row_key):
@@ -214,7 +215,7 @@ def build_payslip(fields: list[dict]) -> dict:
         if m:
             code = m.group("code").strip()
             attr = m.group("attr").strip()
-            if attr not in LINE_ATTR:
+            if attr != "Détail" and attr not in LINE_ATTR:
                 anomalies.append(f"Attribut de ligne inconnu : {label!r}.")
                 continue
             if code not in lines_by_code:
@@ -223,7 +224,14 @@ def build_payslip(fields: list[dict]) -> dict:
                 lines_by_code[code]["_code"] = code
                 lines_by_code[code]["_is_total"] = code in TOTAL_CODES
                 line_order.append(code)
-            lines_by_code[code][LINE_ATTR[attr]] = value
+            # "Détail": code-less absence dates under the code (e.g. "650").
+            # Several may occur for one code, so accumulate instead of
+            # overwriting.
+            if attr == "Détail":
+                if value:
+                    lines_by_code[code]["_details"].append(value)
+            else:
+                lines_by_code[code][LINE_ATTR[attr]] = value
             continue
 
         # --- anything else ----------------------------------------------
@@ -296,6 +304,10 @@ def build_payslip(fields: list[dict]) -> dict:
             line = {k: raw[k] for k in ("num", "label", "nombre", "base",
                                         "tauxSal", "gain", "retenueSal",
                                         "tauxPatr", "retenuePatr")}
+            # Absence dates (if any) render as extra lines under the label,
+            # same cell, matching the bulletin's visual layout.
+            if raw["_details"]:
+                line["label"] = "\n".join([line["label"]] + raw["_details"])
             payslip["lines"].append(line)
 
     # ----- flag expected-but-empty core fields --------------------------
