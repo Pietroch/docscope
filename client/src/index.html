@@ -22,7 +22,7 @@
 
         .debug-link {
             display: block;
-            margin-top: 2rem;
+            margin-top: 0.6rem;
             font-size: 0.85rem;
         }
     </style>
@@ -30,15 +30,23 @@
 
 <body>
     <h1>docscope</h1>
+
+    <h2>Extraction</h2>
     <button onclick="location.href='payslip.html'">Bulletin de paye</button>
-    <button onclick="location.href='documents/list.html'">Documents</button>
+
+    <h2>Documents</h2>
+    <button onclick="location.href='documents/list.html'">Liste des documents</button>
     <button onclick="location.href='documents/pivot.html'">Analyse (pivot)</button>
-    <a class="debug-link" href="debug/ucm.html">Debug extraction UCM</a>
-    <a class="debug-link" href="debug/delvaux.html">Debug extraction Delvaux</a>
-    <a class="debug-link" href="debug/apside.html">Debug extraction Apside</a>
-    <a class="debug-link" href="debug/mosica.html">Debug extraction Mosica</a>
-    <a class="debug-link" href="debug/ricoh.html">Debug extraction Ricoh</a>
-    <a class="debug-link" href="debug/sitti.html">Debug extraction Sitti</a>
+
+    <details>
+        <summary>Debug extraction (par modèle)</summary>
+        <a class="debug-link" href="debug/ucm.html">UCM</a>
+        <a class="debug-link" href="debug/delvaux.html">Delvaux</a>
+        <a class="debug-link" href="debug/apside.html">Apside</a>
+        <a class="debug-link" href="debug/mosica.html">Mosica</a>
+        <a class="debug-link" href="debug/ricoh.html">Ricoh</a>
+        <a class="debug-link" href="debug/sitti.html">Sitti</a>
+    </details>
 </body>
 
 </html>

@@ -1,0 +1,803 @@
+<!-- client/src/documents/graphique-sitti.html -->
+
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <title>docscope — vue graphique SITTI</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 0;
+        }
+
+        /* --- vue graphique (bulletin sitti) --- */
+        :root {
+            --ink: #000;
+            --line: #000;
+            --fs: 8pt;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        .sheet {
+            width: auto;
+            margin: 0;
+            background: #fff;
+            padding: 6mm 5mm;
+            font-size: var(--fs);
+            line-height: 1.25;
+            box-shadow: 0 0 0 1px #ddd;
+            color: var(--ink);
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        td,
+        th {
+            padding: 0;
+            vertical-align: top;
+        }
+
+        .b {
+            font-weight: bold;
+        }
+
+        .k {
+            font-weight: bold;
+        }
+
+        .r {
+            text-align: right;
+        }
+
+        .c {
+            text-align: center;
+        }
+
+        /* ---- bloc d'en-tête : titre + employeur | grille d'identité ---- */
+        .head {
+            border: 1px solid var(--line);
+        }
+
+        .head>tbody>tr>td {
+            border: 1px solid var(--line);
+            padding: 3px 5px;
+        }
+
+        .head .left-col {
+            width: 31%;
+        }
+
+        .doc-title {
+            font-size: 13pt;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .emp-name {
+            margin-bottom: 2px;
+        }
+
+        .siret-line {
+            margin-top: 2px;
+        }
+
+        .head .topright {
+            padding: 0;
+        }
+
+        .head .grid-cell {
+            padding: 0;
+        }
+
+        /* période / paiement */
+        .pp {
+            border-collapse: collapse;
+        }
+
+        .pp td {
+            padding: 3px 5px;
+            white-space: nowrap;
+        }
+
+        /* grille légende/valeur */
+        .grid {
+            border-collapse: collapse;
+        }
+
+        .grid th,
+        .grid td {
+            border: 1px solid var(--line);
+            padding: 1px 5px;
+            font-weight: normal;
+        }
+
+        .grid th {
+            text-align: center;
+            font-size: 7.6pt;
+        }
+
+        .grid td {
+            height: 15px;
+        }
+
+        .grid .no-l {
+            border-left: none;
+        }
+
+        .grid .no-r {
+            border-right: none;
+        }
+
+        .grid .ccn {
+            vertical-align: top;
+            padding-top: 3px;
+        }
+
+        /* ---- URSSAF | salarié ---- */
+        .parties {
+            border: 1px solid var(--line);
+            border-top: none;
+        }
+
+        .parties td {
+            border: 1px solid var(--line);
+            border-top: none;
+            padding: 4px 5px;
+            line-height: 1.5;
+        }
+
+        .parties .urssaf {
+            width: 42%;
+        }
+
+        .parties .who {
+            padding-left: 30px;
+            padding-top: 22px;
+        }
+
+        .parties .civ {
+            display: inline-block;
+            width: 40px;
+        }
+
+        /* ---- compteurs DIF / congés ---- */
+        .midrow {
+            border-collapse: collapse;
+        }
+
+        .midrow>tbody>tr>td {
+            vertical-align: top;
+            padding: 0;
+        }
+
+        .midrow .box {
+            width: 48%;
+            border: 1px solid var(--line);
+            border-top: none;
+        }
+
+        .midrow .gap {
+            border: none;
+        }
+
+        .counters {
+            border-collapse: collapse;
+        }
+
+        .counters th,
+        .counters td {
+            border: 1px solid var(--line);
+            padding: 1px 5px;
+            font-size: 7.6pt;
+            height: 15px;
+        }
+
+        .counters th {
+            text-align: center;
+            font-weight: normal;
+        }
+
+        .counters .cnr {
+            border-top: none;
+            border-left: none;
+        }
+
+        .counters .rowlabel {
+            text-align: right;
+            width: 30%;
+            border-left: none;
+        }
+
+        .counters td.v {
+            text-align: right;
+        }
+
+        .leavedates {
+            border-top: 1px solid var(--line);
+        }
+
+        .leavedates table {
+            border-collapse: collapse;
+        }
+
+        .leavedates td {
+            padding: 1px 5px;
+            height: 15px;
+            white-space: nowrap;
+        }
+
+        .leavedates .lbl {
+            width: 30%;
+        }
+
+        .leavedates .slot {
+            border-bottom: 1px solid #999;
+            min-width: 54px;
+        }
+
+        /* ---- commentaire + abattements ---- */
+        .comment {
+            border-collapse: collapse;
+        }
+
+        .comment>tbody>tr>td {
+            border: 1px solid var(--line);
+            border-top: none;
+            padding: 3px 5px;
+            vertical-align: top;
+        }
+
+        .comment .cmt {
+            width: 58%;
+        }
+
+        .comment .abat {
+            padding: 0;
+        }
+
+        .abat table {
+            border-collapse: collapse;
+        }
+
+        .abat th,
+        .abat td {
+            border: 1px solid var(--line);
+            border-top: none;
+            padding: 1px 5px;
+            font-weight: normal;
+            font-size: 7.6pt;
+            height: 15px;
+        }
+
+        .abat th {
+            text-align: center;
+        }
+
+        .abat td {
+            text-align: right;
+        }
+
+        .abat .no-r {
+            border-right: none;
+        }
+
+        /* ---- table des rubriques ---- */
+        .cot {
+            margin-top: 6px;
+            border: 1px solid var(--line);
+        }
+
+        .cot col.c-num {
+            width: 4%;
+        }
+
+        .cot col.c-des {
+            width: 24%;
+        }
+
+        .cot col.c-nb {
+            width: 8%;
+        }
+
+        .cot col.c-base {
+            width: 9%;
+        }
+
+        .cot col.c-txs {
+            width: 8%;
+        }
+
+        .cot col.c-gain {
+            width: 9%;
+        }
+
+        .cot col.c-ret {
+            width: 9%;
+        }
+
+        .cot col.c-txp {
+            width: 8%;
+        }
+
+        .cot col.c-rp {
+            width: 9%;
+        }
+
+        .cot col.c-rm {
+            width: 12%;
+        }
+
+        .cot th,
+        .cot td {
+            border-left: 1px solid var(--line);
+            border-right: 1px solid var(--line);
+            padding: 0 4px;
+            font-size: 7.8pt;
+            height: 13px;
+            line-height: 13px;
+        }
+
+        .cot thead th {
+            border: 1px solid var(--line);
+            text-align: center;
+            font-weight: normal;
+            vertical-align: middle;
+            height: 16px;
+            line-height: 1.15;
+        }
+
+        .cot tbody td {
+            border-top: none;
+            border-bottom: none;
+        }
+
+        .cot .num {
+            text-align: right;
+        }
+
+        .cot .des {
+            text-align: left;
+        }
+
+        .cot .v {
+            text-align: right;
+        }
+
+        /* lignes "Total ..." : libellé décalé, filet court au-dessus des
+           seules colonnes chiffrées, respiration verticale */
+        .cot .totalrow td {
+            height: 26px;
+            vertical-align: bottom;
+            padding-bottom: 2px;
+        }
+
+        .cot .totalrow .des {
+            padding-left: 42px;
+        }
+
+        .cot .totalrow .ruled {
+            border-top: 1px solid var(--line);
+        }
+
+        .cot .filler td {
+            height: 150px;
+        }
+
+        /* ---- bandeau Cumuls ---- */
+        .cumuls {
+            border: 1px solid var(--line);
+            border-top: none;
+        }
+
+        .cumuls th,
+        .cumuls td {
+            border: 1px solid var(--line);
+            padding: 2px 5px;
+            font-size: 7.6pt;
+            height: 17px;
+            text-align: right;
+        }
+
+        .cumuls th {
+            font-weight: normal;
+            text-align: center;
+            vertical-align: middle;
+            line-height: 1.15;
+        }
+
+        .cumuls .corner {
+            text-align: center;
+        }
+
+        .cumuls .rowlabel {
+            text-align: left;
+        }
+
+        .cumuls .netth {
+            font-weight: bold;
+        }
+
+        .cumuls .netval {
+            font-weight: bold;
+            vertical-align: bottom;
+        }
+
+        .footer-note {
+            margin-top: 3px;
+            font-size: 7.4pt;
+        }
+
+        /* ---- chrome docscope (identique aux vues apside / ricoh) ---- */
+        #anomalies {
+            margin: 1rem;
+            border: 1px solid #e0b400;
+            background: #fff8e1;
+            border-radius: 6px;
+            padding: 0.75rem 1rem;
+            font-size: 0.9rem;
+            font-family: sans-serif;
+        }
+
+        #anomalies h2 {
+            font-size: 0.95rem;
+            margin: 0 0 0.4rem;
+            color: #8a6d00;
+        }
+
+        #anomalies ul {
+            margin: 0;
+            padding-left: 1.2rem;
+        }
+
+        #anomalies.ok {
+            border-color: #2e7d32;
+            background: #edf7ed;
+        }
+
+        #anomalies.ok h2 {
+            color: #2e7d32;
+        }
+
+        #vue-error {
+            color: #b00020;
+            margin: 1rem;
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="anomalies" hidden></div>
+    <div id="vue-error" hidden></div>
+    <div id="bulletin-mount"></div>
+
+    <script>
+        const documentId = new URLSearchParams(location.search).get("id");
+        const vueError = document.getElementById("vue-error");
+        const anomaliesBox = document.getElementById("anomalies");
+        const bulletinMount = document.getElementById("bulletin-mount");
+
+        // petit échappement pour le bandeau d'anomalies (texte serveur)
+        const escapeHtml = (s) => String(s)
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+        const afficherAnomalies = (anomalies) => {
+            anomaliesBox.hidden = false;
+            if (anomalies.length === 0) {
+                anomaliesBox.className = "ok";
+                anomaliesBox.innerHTML = "<h2>Aucune anomalie détectée</h2>";
+                return;
+            }
+            anomaliesBox.className = "";
+            const items = anomalies.map((a) => `<li>${escapeHtml(a)}</li>`).join("");
+            anomaliesBox.innerHTML =
+                `<h2>${anomalies.length} anomalie(s) détectée(s)</h2><ul>${items}</ul>`;
+        };
+
+        // ---- couche de rendu du bulletin sitti, aucune donnée en dur ----
+        const esc = s => (s == null ? "" : String(s))
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const nl2br = s => esc(s).replace(/\n/g, "<br>");
+        const cell = v => (v == null || v === "") ? "" : esc(v);
+        // n'affiche "<étiquette> : <valeur>" que si la valeur existe
+        const kv = (k, v) => (v == null || v === "")
+            ? "" : `<span class="k">${esc(k)}</span> : ${esc(v)}`;
+        // idem sans deux-points, pour les libellés collés à leur valeur
+        const kw = (k, v) => (v == null || v === "")
+            ? "" : `${esc(k)} ${esc(v)}`;
+
+        function renderLines(lines) {
+            let html = "";
+            for (const l of lines) {
+                if (l.type === "total") {
+                    html += `<tr class="totalrow">
+        <td></td>
+        <td class="des">${esc(l.label)}</td>
+        <td></td><td></td><td></td>
+        <td class="v ruled">${cell(l.gain)}</td>
+        <td class="v ruled">${cell(l.retenueSal)}</td>
+        <td></td><td></td>
+        <td class="v ruled">${cell(l.retenueMoinsPatr)}</td>
+      </tr>`;
+                    continue;
+                }
+                html += `<tr>
+        <td class="num">${cell(l.num)}</td>
+        <td class="des">${nl2br(l.label)}</td>
+        <td class="v">${cell(l.nombre)}</td>
+        <td class="v">${cell(l.base)}</td>
+        <td class="v">${cell(l.tauxSal)}</td>
+        <td class="v">${cell(l.gain)}</td>
+        <td class="v">${cell(l.retenueSal)}</td>
+        <td class="v">${cell(l.tauxPatr)}</td>
+        <td class="v">${cell(l.retenuePlusPatr)}</td>
+        <td class="v">${cell(l.retenueMoinsPatr)}</td>
+      </tr>`;
+            }
+            return html;
+        }
+
+        function renderCounters(rows) {
+            return rows.map(r => `
+          <tr>
+            <td class="rowlabel">${esc(r.label)}</td>
+            <td class="v">${cell(r.acquis)}</td>
+            <td class="v">${cell(r.reste)}</td>
+            <td class="v">${cell(r.pris)}</td>
+          </tr>`).join("");
+        }
+
+        // Les trois créneaux du/au sous la grille de compteurs.
+        function renderLeaveDates(slots) {
+            const line = (key, label) => `
+            <tr>
+              <td class="lbl">${label}</td>
+              ${slots.map(s => `<td>${esc(key)} <span class="slot">${cell(s[key])}</span></td>`).join("")}
+            </tr>`;
+            return `<table>
+            ${line("du", '<span class="k">Dates de congés</span> :')}
+            ${line("au", "")}
+          </table>`;
+        }
+
+        function renderCumulsRow(label, t) {
+            return `
+          <tr>
+            <td class="rowlabel">${esc(label)}</td>
+            <td>${cell(t.brut)}</td>
+            <td>${cell(t.netImposable)}</td>
+            <td>${cell(t.chargesSal)}</td>
+            <td>${cell(t.chargesPatr)}</td>
+            <td>${cell(t.heuresTravaillees)}</td>
+            <td>${cell(t.heuresSup)}</td>
+            <td>${cell(t.avantagesNature)}</td>
+          </tr>`;
+        }
+
+        function render(d) {
+            const emp = d.employer, e = d.employee, c = d.contract,
+                p = d.period, t = d.totals;
+
+            return `
+    <div class="sheet">
+
+      <!-- ============ EN-TÊTE ============ -->
+      <table class="head">
+        <tr>
+          <td class="left-col" rowspan="2">
+            <div class="doc-title">${esc(d.docTitle)}</div>
+            <div class="emp-name">${esc(emp.name)}</div>
+            ${emp.addressLines.map(a => `<div>${esc(a)}</div>`).join("")}
+            <div class="siret-line">${kv("N° SIRET", emp.siret)}</div>
+            <div>${kv("APE / NAF", emp.apeNaf)}</div>
+          </td>
+          <td class="topright">
+            <table class="pp">
+              <tr>
+                <td>${kv("Période du", p.from)}</td>
+                <td>${kv("au", p.to)}</td>
+                <td class="r">${kv("Paiement le", p.paymentDate)}</td>
+                <td class="r">${kv("par", p.paymentMode)}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td class="grid-cell">
+            <table class="grid">
+              <tr>
+                <th class="no-l">Matricule</th>
+                <th>Niveau</th>
+                <th>Coefficient</th>
+                <th>Indice</th>
+                <th>Ancienneté</th>
+                <th class="no-r">N° de Sécurité Sociale</th>
+              </tr>
+              <tr>
+                <td class="no-l">${cell(c.matricule)}</td>
+                <td>${cell(c.niveau)}</td>
+                <td>${cell(c.coefficient)}</td>
+                <td>${cell(c.indice)}</td>
+                <td>${cell(c.anciennete)}</td>
+                <td class="no-r">${cell(c.numSS)}</td>
+              </tr>
+              <tr>
+                <th class="no-l" colspan="2">Catégorie</th>
+                <th colspan="2">Emploi occupé</th>
+                <th class="no-r" colspan="2">Département</th>
+              </tr>
+              <tr>
+                <td class="no-l" colspan="2">${cell(c.categorie)}</td>
+                <td colspan="2">${cell(c.emploi)}</td>
+                <td class="no-r" colspan="2">${cell(c.departement)}</td>
+              </tr>
+              <tr>
+                <th class="no-l">Qualification</th>
+                <th>Horaire</th>
+                <td class="ccn no-r" colspan="4" rowspan="2">${nl2br(c.ccn)}</td>
+              </tr>
+              <tr>
+                <td class="no-l">${kw("Position", c.qualification)}</td>
+                <td>${cell(c.horaire)}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <!-- ============ URSSAF / SALARIÉ ============ -->
+      <table class="parties">
+        <tr>
+          <td class="urssaf">
+            <div>URSSAF</div>
+            <div>${cell(emp.urssafNumber)}</div>
+            ${emp.urssafAddressLines.map(a => `<div>${esc(a)}</div>`).join("")}
+          </td>
+          <td class="who">
+            <div>
+              <span class="civ">${esc(e.civility)}</span><span class="b">${esc(e.name)}</span>
+            </div>
+            ${e.addressLines.map(a => `<div>${esc(a)}</div>`).join("")}
+          </td>
+        </tr>
+      </table>
+
+      <!-- ============ COMPTEURS D.I.F. / CONGÉS ============ -->
+      <table class="midrow">
+        <tr>
+          <td class="box">
+            <table class="counters">
+              <tr>
+                <th class="cnr"></th>
+                <th>Acquis</th>
+                <th>Reste à prendre</th>
+                <th>Pris</th>
+              </tr>
+              ${renderCounters(d.counters.rows)}
+            </table>
+            <div class="leavedates">${renderLeaveDates(d.counters.leaveDates)}</div>
+          </td>
+          <td class="gap"></td>
+        </tr>
+      </table>
+
+      <!-- ============ COMMENTAIRE / ABATTEMENTS ============ -->
+      <table class="comment">
+        <tr>
+          <td class="cmt">
+            <div>${kv("Commentaire", d.comment.text)}</div>
+            <div>${kw("Sorti le", d.comment.exitDate)}</div>
+          </td>
+          <td class="abat">
+            <table>
+              <tr>
+                <th>Abat mensuel</th>
+                <th class="no-r">Abat cumulé</th>
+              </tr>
+              <tr>
+                <td>${cell(d.abatement.mensuel)}</td>
+                <td class="no-r">${cell(d.abatement.cumule)}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <!-- ============ RUBRIQUES ============ -->
+      <table class="cot">
+        <colgroup>
+          <col class="c-num"><col class="c-des"><col class="c-nb"><col class="c-base">
+          <col class="c-txs"><col class="c-gain"><col class="c-ret">
+          <col class="c-txp"><col class="c-rp"><col class="c-rm">
+        </colgroup>
+        <thead>
+          <tr>
+            <th rowspan="2">N°</th>
+            <th rowspan="2">Désignation</th>
+            <th rowspan="2">Nombre</th>
+            <th rowspan="2">Base</th>
+            <th colspan="3">Part salariale</th>
+            <th colspan="3">Part patronale</th>
+          </tr>
+          <tr>
+            <th>Taux</th>
+            <th>Gain</th>
+            <th>Retenue</th>
+            <th>Taux</th>
+            <th>Retenue (+)</th>
+            <th>Retenue (-)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${renderLines(d.lines)}
+          <tr class="filler">
+            <td></td><td></td><td></td><td></td><td></td>
+            <td></td><td></td><td></td><td></td><td></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- ============ CUMULS ============ -->
+      <table class="cumuls">
+        <thead>
+          <tr>
+            <th class="corner" style="width:8%">Cumuls</th>
+            <th>Salaire brut</th>
+            <th>Net imposable</th>
+            <th>Charges salariales</th>
+            <th>Charges patronales</th>
+            <th>Heures travaillées</th>
+            <th>Heures sup.</th>
+            <th>Avantages en<br>nature</th>
+            <th class="netth" style="width:12%">NET A PAYER</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="rowlabel">Période</td>
+            <td>${cell(t.periode.brut)}</td>
+            <td>${cell(t.periode.netImposable)}</td>
+            <td>${cell(t.periode.chargesSal)}</td>
+            <td>${cell(t.periode.chargesPatr)}</td>
+            <td>${cell(t.periode.heuresTravaillees)}</td>
+            <td>${cell(t.periode.heuresSup)}</td>
+            <td>${cell(t.periode.avantagesNature)}</td>
+            <td class="netval" rowspan="2">${cell(d.netToPay.amount)}</td>
+          </tr>
+          ${renderCumulsRow("Année", t.annee)}
+        </tbody>
+      </table>
+
+      <div class="footer-note">${esc(d.footerNote)}</div>
+
+    </div>`;
+        }
+
+        // Récupère le payslip structuré depuis le back et rend le bulletin.
+        fetch(`http://localhost:8000/documents/${documentId}/payslip`)
+            .then(async (response) => {
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail);
+                return data;
+            })
+            .then((data) => {
+                afficherAnomalies(data.anomalies || []);
+                bulletinMount.innerHTML = render(data);
+            })
+            .catch((err) => {
+                vueError.hidden = false;
+                vueError.textContent = `Impossible de charger la vue graphique : ${err.message}`;
+            });
+    </script>
+</body>
+
+</html>

@@ -10,11 +10,11 @@ from pydantic import BaseModel
 from docscope.services.documents import (
     DocumentLocked,
     InvalidDocumentName,
-    WrongTemplate,
+    NoPayslipView,
     create_documents,
     create_field,
-    get_apside_payslip,
     get_document,
+    get_payslip,
     list_documents,
     set_document_validated,
     update_field,
@@ -45,7 +45,7 @@ class DocumentIn(BaseModel):
 
 
 class DocumentsIn(BaseModel):
-    template: Literal["ucm", "delvaux", "apside"]
+    template: Literal["ucm", "delvaux", "apside", "mosica", "ricoh", "sitti"]
     documents: list[DocumentIn]
 
 
@@ -80,11 +80,11 @@ def get_document_by_id(document_id: int) -> dict:
 @router.get("/documents/{document_id}/payslip")
 def get_document_payslip(document_id: int) -> dict:
     try:
-        payslip = get_apside_payslip(document_id)
-    except WrongTemplate as exc:
+        payslip = get_payslip(document_id)
+    except NoPayslipView as exc:
         raise HTTPException(
             status_code=409,
-            detail=f"Ce document n'est pas au format apside (modèle : {exc.actual}).",
+            detail=f"Aucune vue graphique pour ce modèle ({exc.template}).",
         )
     if payslip is None:
         raise HTTPException(status_code=404, detail="Document introuvable.")

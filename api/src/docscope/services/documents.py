@@ -15,9 +15,18 @@ from sqlalchemy import CheckConstraint, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 from docscope.core.database import engine
-from docscope.services.payslip_apside import build_payslip
+from docscope.services import payslip_apside, payslip_ricoh, payslip_sitti
 
-TEMPLATES = ("ucm", "delvaux", "apside")
+TEMPLATES = ("ucm", "delvaux", "apside", "mosica", "ricoh", "sitti")
+
+# One dedicated "payslip" builder per template with a graphique view (see
+# payslip_apside.build_payslip for the shape). Add an entry here as each new
+# template gets its own view.
+PAYSLIP_BUILDERS = {
+    "apside": payslip_apside.build_payslip,
+    "ricoh": payslip_ricoh.build_payslip,
+    "sitti": payslip_sitti.build_payslip,
+}
 
 # Expected file name: "NOM Prenom_ENTREPRISE_TYPE_YYYYMMDD[.ext]".
 # TYPE becomes the document's `type` column - only "Bulletin" is accepted
@@ -331,30 +340,30 @@ def set_document_validated(document_id: int, validated: bool) -> dict | None:
         return {"id": document.id, "validated": document.validated}
 
 
-class WrongTemplate(Exception):
-    """Raised when a template-specific view is requested for a document
-    whose template doesn't match."""
+class NoPayslipView(Exception):
+    """Raised when a "payslip" (graphique view) is requested for a document
+    whose template has no dedicated builder in PAYSLIP_BUILDERS."""
 
-    def __init__(self, document_id: int, expected: str, actual: str):
+    def __init__(self, document_id: int, template: str):
         self.document_id = document_id
-        self.expected = expected
-        self.actual = actual
+        self.template = template
         super().__init__(
-            f"Document {document_id} is '{actual}', not '{expected}'."
+            f"Document {document_id} has no payslip view for template '{template}'."
         )
 
 
-def get_apside_payslip(document_id: int) -> dict | None:
-    """Structured 'payslip' object for an apside document, built from its
-    extracted fields (see payslip_apside.build_payslip). Returns None if the
-    document doesn't exist; raises WrongTemplate if it isn't an apside
-    document. The reconstruction is static: it reflects the fields as they
-    are stored at call time."""
+def get_payslip(document_id: int) -> dict | None:
+    """Structured 'payslip' object for a document, built from its extracted
+    fields via its template's own builder (see PAYSLIP_BUILDERS). Returns
+    None if the document doesn't exist; raises NoPayslipView if its
+    template has no graphique view. The reconstruction is static: it
+    reflects the fields as they are stored at call time."""
     document = get_document(document_id)
     if document is None:
         return None
-    if document["template"] != "apside":
-        raise WrongTemplate(document_id, "apside", document["template"])
+    build_payslip = PAYSLIP_BUILDERS.get(document["template"])
+    if build_payslip is None:
+        raise NoPayslipView(document_id, document["template"])
 
     payslip = build_payslip(document["fields"])
     # carry a bit of document identity through, handy for the page header

@@ -146,21 +146,30 @@
         // nothing else in this page is template-specific.
         const DESIGNATION_ATTRS = ["Désignation", "Libellé", "Rubrique"];
 
-        // Rubric line groups: "<code> — <attr>" or "<Total ...> — <attr>",
-        // same convention as the backend's own _TABLE_LINE_RE (documents.py).
-        // Only these get their attributes reordered and their Désignation
-        // folded into the header - other labels (Synthèse, RTT/Congés,
-        // plain fields) keep their own single column, as before.
-        const TABLE_GROUP_RE = /^(\d+|Total Brut|Total Cotisations) — (.+)$/;
+        // Rubric line groups: "<code> — <attr>" or "<Total ...> — <attr>".
+        // The code itself varies by template - purely numeric for apside
+        // ("650", "3010"), alphanumeric for ricoh ("ISO", "A02", "UFB") -
+        // so any run of letters/digits qualifies, plus apside's two literal
+        // "Total ..." lines (they contain a space, so they need their own
+        // alternative). Only these get their attributes reordered and their
+        // Désignation folded into the header - other labels (Synthèse,
+        // RTT/Congés, plain fields) keep their own single column, as before.
+        const TABLE_GROUP_RE = /^([A-Za-z0-9]+|Total Brut|Total Cotisations) — (.+)$/;
 
         // Canonical attribute order within a rubric line, independent of
         // whatever order the extraction happened to store them in (field
         // arrival order can be scrambled - see apside.py's own notes on
         // out-of-sequence OCR lines). Désignation isn't listed: it names the
-        // group instead of being its own column. Unknown attributes (a
-        // future template's own naming) sort after the known ones.
-        const ATTR_ORDER = ["Nombre", "Base", "Taux (sal)", "Gain (sal)",
-            "Retenue (sal)", "Taux (patr)", "Retenue (patr)", "Détail"];
+        // group instead of being its own column. Each template only ever
+        // contributes its own attribute names to a given pivot (grouped by
+        // template beforehand), so listing every template's names here -
+        // apside first, then ricoh - doesn't cross-interfere. Unknown
+        // attributes (a future template's own naming) sort after all of
+        // these, in first-seen order.
+        const ATTR_ORDER = [
+            "Nombre", "Base", "Taux (sal)", "Gain (sal)", "Retenue (sal)", "Taux (patr)", "Retenue (patr)", "Détail",
+            "Nombre ou base", "Taux salarial", "Taux", "A payer", "A déduire", "Retenue", "Part patr",
+        ];
         const attrRank = (attr) => {
             const i = ATTR_ORDER.indexOf(attr);
             return i === -1 ? ATTR_ORDER.length : i;

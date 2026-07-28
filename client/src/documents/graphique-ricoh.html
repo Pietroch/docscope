@@ -1,0 +1,633 @@
+<!-- client/src/documents/graphique-ricoh.html -->
+
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <title>docscope — vue graphique Ricoh</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 0;
+        }
+
+        /* --- vue graphique (bulletin ricoh) --- */
+        :root {
+            --ink: #000;
+            --line: #000;
+            --net-bg: #d9ead3;
+            --head-bg: #eef1f6;
+            --fs: 8.5pt;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        .sheet {
+            width: auto;
+            margin: 0;
+            background: #fff;
+            padding: 6mm 5mm;
+            font-size: var(--fs);
+            line-height: 1.25;
+            box-shadow: 0 0 0 1px #ddd;
+            position: relative;
+            color: var(--ink);
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        td,
+        th {
+            padding: 0;
+            vertical-align: top;
+        }
+
+        .b {
+            font-weight: bold;
+        }
+
+        .right {
+            text-align: right;
+        }
+
+        .center {
+            text-align: center;
+        }
+
+        .k {
+            font-weight: bold;
+        }
+
+        /* ---- bandeau de titre ---- */
+        .titlebar {
+            margin-bottom: 4px;
+        }
+
+        .titlebar td {
+            vertical-align: top;
+        }
+
+        .doc-title {
+            font-size: 17pt;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .convcoll {
+            width: 34%;
+        }
+
+        .titlebar .meta {
+            width: 34%;
+            text-align: right;
+        }
+
+        .period-line {
+            margin-top: 18px;
+        }
+
+        .page-line {
+            margin-top: 2px;
+        }
+
+        /* ---- boîtes employeur / salarié ---- */
+        .parties {
+            margin-bottom: 6px;
+        }
+
+        .parties>tbody>tr>td {
+            vertical-align: top;
+        }
+
+        .employer-box {
+            border: 1px solid var(--line);
+            padding: 5px 8px;
+            width: 100%;
+        }
+
+        .employer-name {
+            font-weight: bold;
+            font-size: 13pt;
+            text-align: center;
+            margin-bottom: 2px;
+        }
+
+        .employer-box .sep {
+            display: flex;
+            gap: 26px;
+        }
+
+        .party-gap {
+            width: 4%;
+        }
+
+        .employee-cell {
+            width: 46%;
+            padding-left: 10px;
+            padding-top: 26px;
+            line-height: 1.45;
+        }
+
+        .employee-name {
+            font-weight: bold;
+        }
+
+        /* ---- bandeau contrat ---- */
+        .contract {
+            border: 1px solid var(--line);
+            padding: 3px 8px;
+            margin-bottom: 6px;
+        }
+
+        .contract table {
+            width: 100%;
+        }
+
+        .contract td {
+            padding: 0 8px 1px 0;
+            white-space: nowrap;
+        }
+
+        /* ---- table des rubriques ---- */
+        .cot {
+            border: 1px solid var(--line);
+        }
+
+        .cot col.c-code {
+            width: 5%;
+        }
+
+        .cot col.c-lib {
+            width: 27%;
+        }
+
+        .cot col.c-mark {
+            width: 4%;
+        }
+
+        .cot col.c-base {
+            width: 11%;
+        }
+
+        .cot col.c-txs {
+            width: 10%;
+        }
+
+        .cot col.c-pay {
+            width: 11%;
+        }
+
+        .cot col.c-ded {
+            width: 11%;
+        }
+
+        .cot col.c-txp {
+            width: 10%;
+        }
+
+        .cot col.c-mtp {
+            width: 11%;
+        }
+
+        .cot th,
+        .cot td {
+            border-left: 1px solid var(--line);
+            border-right: 1px solid var(--line);
+            padding: 0 4px;
+            font-size: 8pt;
+            height: 13.5px;
+            line-height: 13.5px;
+        }
+
+        .cot thead th {
+            border: 1px solid var(--line);
+            background: var(--head-bg);
+            text-align: center;
+            font-weight: bold;
+            vertical-align: middle;
+            height: 15px;
+            line-height: 1.15;
+        }
+
+        .cot tbody td {
+            border-top: none;
+            border-bottom: none;
+        }
+
+        .cot .code {
+            text-align: left;
+            font-weight: bold;
+        }
+
+        .cot .lib {
+            text-align: left;
+        }
+
+        .cot .mark {
+            text-align: center;
+        }
+
+        .cot .r {
+            text-align: right;
+        }
+
+        .cot .patronale {
+            background: var(--head-bg);
+        }
+
+        .cot .totalrow td {
+            font-weight: bold;
+            border-top: 1px solid var(--line);
+        }
+
+        .cot .filler td {
+            height: 120px;
+        }
+
+        /* ---- bandeau TOTAUX ---- */
+        .totaux {
+            margin-top: 10px;
+            border: 1px solid var(--line);
+        }
+
+        .totaux th,
+        .totaux td {
+            border: 1px solid var(--line);
+            padding: 2px 5px;
+            font-size: 7.8pt;
+            height: 18px;
+            text-align: right;
+        }
+
+        .totaux th {
+            font-weight: bold;
+            text-align: center;
+            background: var(--head-bg);
+            vertical-align: middle;
+        }
+
+        .totaux .rowlabel {
+            font-weight: bold;
+            text-align: left;
+        }
+
+        .totaux .net {
+            background: var(--net-bg);
+            font-weight: bold;
+        }
+
+        /* ---- congés + mode de paiement ---- */
+        .leave {
+            margin-top: 8px;
+            border: 1px solid var(--line);
+        }
+
+        .leave th,
+        .leave td {
+            border: 1px solid var(--line);
+            padding: 2px 5px;
+            font-size: 7.8pt;
+            height: 18px;
+            text-align: right;
+        }
+
+        .leave th {
+            font-weight: bold;
+            text-align: center;
+            background: var(--head-bg);
+            vertical-align: middle;
+        }
+
+        .leave .rowlabel {
+            font-weight: bold;
+            text-align: left;
+            width: 46px;
+        }
+
+        .leave .pay {
+            text-align: left;
+        }
+
+        .leave .paydate {
+            text-align: right;
+        }
+
+        .rtt-theo {
+            margin-top: 4px;
+            font-size: 7.8pt;
+        }
+
+        .footer-note {
+            margin-top: 10px;
+            text-align: center;
+            font-size: 7.6pt;
+        }
+
+        /* ---- chrome docscope (identique à la vue apside) ---- */
+        #anomalies {
+            margin: 1rem;
+            border: 1px solid #e0b400;
+            background: #fff8e1;
+            border-radius: 6px;
+            padding: 0.75rem 1rem;
+            font-size: 0.9rem;
+            font-family: sans-serif;
+        }
+
+        #anomalies h2 {
+            font-size: 0.95rem;
+            margin: 0 0 0.4rem;
+            color: #8a6d00;
+        }
+
+        #anomalies ul {
+            margin: 0;
+            padding-left: 1.2rem;
+        }
+
+        #anomalies.ok {
+            border-color: #2e7d32;
+            background: #edf7ed;
+        }
+
+        #anomalies.ok h2 {
+            color: #2e7d32;
+        }
+
+        #vue-error {
+            color: #b00020;
+            margin: 1rem;
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="anomalies" hidden></div>
+    <div id="vue-error" hidden></div>
+    <div id="bulletin-mount"></div>
+
+    <script>
+        const documentId = new URLSearchParams(location.search).get("id");
+        const vueError = document.getElementById("vue-error");
+        const anomaliesBox = document.getElementById("anomalies");
+        const bulletinMount = document.getElementById("bulletin-mount");
+
+        // petit échappement pour le bandeau d'anomalies (texte serveur)
+        const escapeHtml = (s) => String(s)
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+        const afficherAnomalies = (anomalies) => {
+            anomaliesBox.hidden = false;
+            if (anomalies.length === 0) {
+                anomaliesBox.className = "ok";
+                anomaliesBox.innerHTML = "<h2>Aucune anomalie détectée</h2>";
+                return;
+            }
+            anomaliesBox.className = "";
+            const items = anomalies.map((a) => `<li>${escapeHtml(a)}</li>`).join("");
+            anomaliesBox.innerHTML =
+                `<h2>${anomalies.length} anomalie(s) détectée(s)</h2><ul>${items}</ul>`;
+        };
+
+        // ---- couche de rendu du bulletin ricoh, aucune donnée en dur ----
+        const esc = s => (s == null ? "" : String(s))
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const nl2br = s => esc(s).replace(/\n/g, "<br>");
+        const cell = v => (v == null || v === "") ? "" : esc(v);
+        // n'affiche "<étiquette> : <valeur>" que si la valeur existe
+        const kv = (k, v) => (v == null || v === "")
+            ? "" : `<span class="k">${esc(k)}</span> : ${esc(v)}`;
+
+        function renderLines(lines) {
+            return lines.map(l => `
+      <tr class="${l.isTotal ? "totalrow" : ""}">
+        <td class="code">${cell(l.code)}</td>
+        <td class="lib">${nl2br(l.label)}</td>
+        <td class="mark">${cell(l.marker)}</td>
+        <td class="r">${cell(l.base)}</td>
+        <td class="r">${cell(l.tauxSal)}</td>
+        <td class="r">${cell(l.aPayer)}</td>
+        <td class="r">${cell(l.aDeduire)}</td>
+        <td class="r patronale">${cell(l.tauxPatr)}</td>
+        <td class="r patronale">${cell(l.montantPatr)}</td>
+      </tr>`).join("");
+        }
+
+        function renderTotauxRow(label, t, withNet) {
+            return `
+      <tr>
+        <td class="rowlabel">${esc(label)}</td>
+        <td>${cell(t.brut)}</td>
+        <td>${cell(t.frais)}</td>
+        <td>${cell(t.plafondTA)}</td>
+        <td>${cell(t.baseSSPlaf)}</td>
+        <td>${cell(t.netImposable)}</td>
+        <td class="${withNet ? "net" : ""}">${cell(t.netAPayer)}</td>
+      </tr>`;
+        }
+
+        // Le pavé "mode de paiement" occupe les 3 lignes du tableau congés.
+        function renderLeave(rows, pay) {
+            const payCells = [
+                `<td class="pay">${cell(pay.mode)}</td>
+         <td class="paydate">${pay.date ? "LE " + esc(pay.date) : ""}</td>`,
+                `<td class="pay" colspan="2">${cell(pay.banque)}</td>`,
+                `<td class="pay" colspan="2">${cell(pay.iban)}</td>`,
+            ];
+            return rows.map((r, i) => `
+      <tr>
+        <td class="rowlabel">${esc(r.label)}</td>
+        <td>${cell(r.congesA)}</td>
+        <td>${cell(r.congesA1)}</td>
+        <td>${cell(r.rtt)}</td>
+        <td>${cell(r.cet)}</td>
+        <td>${cell(r.rcp)}</td>
+        ${payCells[i] || `<td colspan="2"></td>`}
+      </tr>`).join("");
+        }
+
+        function render(d) {
+            const emp = d.employer, e = d.employee, c = d.contract,
+                p = d.period, pay = d.payment, t = d.totals;
+
+            const periodLine = (p.from || p.to)
+                ? `<div class="period-line">Période du ${esc(p.from)} au ${esc(p.to)}</div>`
+                : "";
+            const pageLine = d.page
+                ? `<div class="page-line">Page ${esc(d.page)}</div>` : "";
+            const rttTheo = d.leave.rttTheorique
+                ? `<div class="rtt-theo"><span class="k">RTT THEORIQUE</span> : ${esc(d.leave.rttTheorique)}</div>`
+                : "";
+
+            return `
+    <div class="sheet">
+
+      <!-- ============ TITRE / PÉRIODE ============ -->
+      <table class="titlebar">
+        <tr>
+          <td class="convcoll">
+            <div>Convention collective de la</div>
+            <div>${nl2br(emp.convCollLabel)}</div>
+          </td>
+          <td><div class="doc-title">${esc(d.docTitle)}</div></td>
+          <td class="meta">${pageLine}${periodLine}</td>
+        </tr>
+      </table>
+
+      <!-- ============ EMPLOYEUR / SALARIÉ ============ -->
+      <table class="parties">
+        <tr>
+          <td style="width:50%">
+            <div class="employer-box">
+              <div class="employer-name">${esc(emp.name)}</div>
+              ${emp.addressLines.map(a => `<div>${esc(a)}</div>`).join("")}
+              <div>${kv("Etablissement", emp.etablissement)}</div>
+              <div class="sep">
+                <span>${kv("Siret", emp.siret)}</span>
+                <span>${kv("APE", emp.ape)}</span>
+              </div>
+              <div>${emp.urssafDept ? "URSSAF de " + esc(emp.urssafDept) : ""}</div>
+              <div>${kv("N. URSSAF", emp.urssafNumber)}</div>
+            </div>
+          </td>
+          <td class="party-gap"></td>
+          <td class="employee-cell">
+            <div>
+              ${e.civility ? `<span class="b">${esc(e.civility)}</span> ` : ""}
+              <span class="employee-name">${esc(e.name)}</span>
+            </div>
+            ${e.addressLines.map(a => `<div>${esc(a)}</div>`).join("")}
+          </td>
+        </tr>
+      </table>
+
+      <!-- ============ BANDEAU CONTRAT ============ -->
+      <div class="contract">
+        <table>
+          <tr>
+            <td colspan="3">${kv("Emploi", c.emploi)}</td>
+          </tr>
+          <tr>
+            <td style="width:38%">${kv("Affectation", c.affectation)}</td>
+            <td style="width:32%">${kv("Date d'entrée", c.dateEntree)}</td>
+            <td>${kv("Matricule", c.matricule)}</td>
+          </tr>
+          <tr>
+            <td>${kv("Position", c.position)}&nbsp;&nbsp;&nbsp;&nbsp;${kv("Indice", c.indice)}</td>
+            <td>${kv("Ancienneté", c.anciennete)}</td>
+            <td>${kv("N° SS", c.numSS)}</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td>${kv("Horaire de référence", c.horaireRef)}</td>
+            <td>${kv("Salaire de base", c.salaireBase)}</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td>${kv("Minimum conventionnel", c.minimumConv)}</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- ============ RUBRIQUES ============ -->
+      <table class="cot">
+        <colgroup>
+          <col class="c-code"><col class="c-lib"><col class="c-mark">
+          <col class="c-base"><col class="c-txs">
+          <col class="c-pay"><col class="c-ded">
+          <col class="c-txp"><col class="c-mtp">
+        </colgroup>
+        <thead>
+          <tr>
+            <th colspan="3" rowspan="2">Rubriques</th>
+            <th rowspan="2">Nombre ou<br>base</th>
+            <th rowspan="2">Taux<br>salarial</th>
+            <th colspan="2">Montants</th>
+            <th colspan="2">Part patronale</th>
+          </tr>
+          <tr>
+            <th>A payer</th>
+            <th>A déduire</th>
+            <th>Taux</th>
+            <th>Montant</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${renderLines(d.lines)}
+          <tr class="filler">
+            <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+            <td class="patronale"></td><td class="patronale"></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- ============ TOTAUX ============ -->
+      <table class="totaux">
+        <thead>
+          <tr>
+            <th style="width:14%">TOTAUX</th>
+            <th>BRUT</th>
+            <th>FRAIS</th>
+            <th>PLAFOND TA</th>
+            <th>Base SS Plafonnée</th>
+            <th>NET IMPOSABLE</th>
+            <th>NET A PAYER</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${renderTotauxRow("MENSUEL", t.mensuel, true)}
+          ${renderTotauxRow("CUMUL ANNUEL", t.cumul, false)}
+        </tbody>
+      </table>
+
+      <!-- ============ CONGÉS / MODE DE PAIEMENT ============ -->
+      <table class="leave">
+        <thead>
+          <tr>
+            <th style="width:6%"></th>
+            <th>CONGES A(j)</th>
+            <th>CONGES A-1(j)</th>
+            <th>RTT (j)</th>
+            <th>CET (j)</th>
+            <th>RCP (j)</th>
+            <th colspan="2">MODE DE PAIEMENT</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${renderLeave(d.leave.rows, pay)}
+        </tbody>
+      </table>
+      ${rttTheo}
+
+      <div class="footer-note">${esc(d.footerNote)}</div>
+
+    </div>`;
+        }
+
+        // Récupère le payslip structuré depuis le back et rend le bulletin.
+        fetch(`http://localhost:8000/documents/${documentId}/payslip`)
+            .then(async (response) => {
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail);
+                return data;
+            })
+            .then((data) => {
+                afficherAnomalies(data.anomalies || []);
+                bulletinMount.innerHTML = render(data);
+            })
+            .catch((err) => {
+                vueError.hidden = false;
+                vueError.textContent = `Impossible de charger la vue graphique : ${err.message}`;
+            });
+    </script>
+</body>
+
+</html>
