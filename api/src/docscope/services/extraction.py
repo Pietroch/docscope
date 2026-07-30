@@ -11,7 +11,7 @@ import pdfplumber
 import pytesseract
 from PIL import Image
 
-from docscope.services.models import apside, delvaux, mosica, ricoh, sitti, ucm
+from docscope.services.models import apside, delvaux, mosica, partena, ricoh, sdworx, sitti, ucm
 
 
 def extract_pdf_text(content: bytes) -> str:
@@ -158,6 +158,56 @@ def extract_sitti(text: str) -> dict:
     ]
 
     table, summary = sitti.extract_earnings_table(text)
+    table_json = [
+        {"ligne": code, "colonne": column, "valeur": value}
+        for code, column, value in table
+    ]
+    summary_json = [
+        {"intitule": label, "valeur": value} for _, label, value in summary
+    ]
+
+    return {
+        "text": text,
+        "champs": fields,
+        "tableau": table_json,
+        "synthese": summary_json,
+    }
+
+
+def extract_partena(text: str) -> dict:
+    """Run Partena field + earnings table extraction and shape the result
+    for the API response."""
+    fields = [
+        {"intitule": label, "valeur": value}
+        for label, value in partena.extract_fields(text)
+    ]
+
+    table, summary = partena.extract_earnings_table(text)
+    table_json = [
+        {"ligne": code, "colonne": column, "valeur": value}
+        for code, column, value in table
+    ]
+    summary_json = [
+        {"intitule": label, "valeur": value} for _, label, value in summary
+    ]
+
+    return {
+        "text": text,
+        "champs": fields,
+        "tableau": table_json,
+        "synthese": summary_json,
+    }
+
+
+def extract_sdworx(text: str) -> dict:
+    """Run SD Worx field + earnings table extraction and shape the result
+    for the API response."""
+    fields = [
+        {"intitule": label, "valeur": value}
+        for label, value in sdworx.extract_fields(text)
+    ]
+
+    table, summary = sdworx.extract_earnings_table(text)
     table_json = [
         {"ligne": code, "colonne": column, "valeur": value}
         for code, column, value in table

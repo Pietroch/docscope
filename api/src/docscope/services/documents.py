@@ -15,15 +15,16 @@ from sqlalchemy import CheckConstraint, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 from docscope.core.database import engine
-from docscope.services import payslip_apside, payslip_ricoh, payslip_sitti
+from docscope.services import payslip_apside, payslip_mosica, payslip_ricoh, payslip_sitti
 
-TEMPLATES = ("ucm", "delvaux", "apside", "mosica", "ricoh", "sitti")
+TEMPLATES = ("ucm", "delvaux", "apside", "mosica", "ricoh", "sitti", "partena", "sdworx")
 
 # One dedicated "payslip" builder per template with a graphique view (see
 # payslip_apside.build_payslip for the shape). Add an entry here as each new
 # template gets its own view.
 PAYSLIP_BUILDERS = {
     "apside": payslip_apside.build_payslip,
+    "mosica": payslip_mosica.build_payslip,
     "ricoh": payslip_ricoh.build_payslip,
     "sitti": payslip_sitti.build_payslip,
 }

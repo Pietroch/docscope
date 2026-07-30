@@ -45,7 +45,7 @@ class DocumentIn(BaseModel):
 
 
 class DocumentsIn(BaseModel):
-    template: Literal["ucm", "delvaux", "apside", "mosica", "ricoh", "sitti"]
+    template: Literal["ucm", "delvaux", "apside", "mosica", "ricoh", "sitti", "partena", "sdworx"]
     documents: list[DocumentIn]
 
 

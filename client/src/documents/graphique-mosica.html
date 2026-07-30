@@ -1,0 +1,736 @@
+<!-- client/src/documents/graphique-mosica.html -->
+
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <title>docscope — vue graphique MOSICA</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 0;
+        }
+
+        /* --- vue graphique (bulletin mosica / EBP) ---
+           Valeurs relevées sur la version numérique du bulletin (PDF avec
+           couche texte, octobre 2020) plutôt qu'estimées à l'œil sur un scan :
+             police   Arial (regular / Bold / Italic / BoldItalic)
+             corps    7,64 pt partout ; 5,73 pt pour la seule ligne SIRET/NAF
+                      et les lignes de détail en italique ; 11,46 pt BoldItalic
+                      pour le net avant impôt (absent du millésime 2018)
+             bandeaux #4682B4 (relevé : 0.275 / 0.510 / 0.706), texte blanc
+             marges   28,4 pt = 10 mm à gauche et à droite
+             pas des lignes du tableau 9,9 pt (~13,2 px) */
+        :root {
+            --ink: #000;
+            --line: #000;
+            --band: #4682B4;
+            --band-ink: #fff;
+            --net-bg: #e8e8e8;
+            --fs: 7.64pt;
+            --fs-sm: 5.73pt;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        .sheet {
+            width: auto;
+            margin: 0;
+            background: #fff;
+            font-family: Arial, Helvetica, sans-serif;
+            padding: 6mm 10mm;
+            font-size: var(--fs);
+            line-height: 1.3;
+            box-shadow: 0 0 0 1px #ddd;
+            color: var(--ink);
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        td,
+        th {
+            padding: 0;
+            vertical-align: top;
+        }
+
+        .b {
+            font-weight: bold;
+        }
+
+        .r {
+            text-align: right;
+        }
+
+        .c {
+            text-align: center;
+        }
+
+        .k {
+            font-weight: bold;
+        }
+
+        /* ---- bandeau de titre ---- */
+        .titlebar {
+            background: var(--band);
+            color: var(--band-ink);
+        }
+
+        .titlebar td {
+            padding: 3px 8px;
+            white-space: nowrap;
+        }
+
+        .titlebar .num {
+            padding-left: 26px;
+        }
+
+        /* ---- identités ---- */
+        .parties {
+            margin-top: 10px;
+        }
+
+        .parties>tbody>tr>td {
+            vertical-align: top;
+            width: 50%;
+            padding-right: 12px;
+        }
+
+        .parties .who {
+            padding-left: 40px;
+        }
+
+        .legal {
+            margin-top: 16px;
+            font-size: var(--fs-sm);
+        }
+
+        .legal .gap {
+            display: inline-block;
+            width: 14px;
+        }
+
+        .urssaf {
+            margin-top: 10px;
+        }
+
+        /* ---- encadré contrat ---- */
+        .contract-box {
+            border: 1px solid var(--line);
+            padding: 3px 6px;
+        }
+
+        .contract-box table {
+            width: 100%;
+        }
+
+        .contract-box td {
+            padding: 0 4px 1px 0;
+            white-space: nowrap;
+        }
+
+        .contract-box .lab {
+            width: 30%;
+        }
+
+        .contract-box .lab2 {
+            width: 20%;
+            padding-left: 10px;
+        }
+
+        .ccn {
+            margin-top: 8px;
+        }
+
+        /* ---- table des rubriques ---- */
+        .cot {
+            margin-top: 4px;
+        }
+
+        .cot col.c-lib {
+            width: 44%;
+        }
+
+        .cot col.c-v {
+            width: 8%;
+        }
+
+        .cot col.c-vp {
+            width: 10%;
+        }
+
+        .cot thead .grp th {
+            border: none;
+            background: transparent;
+            padding: 0;
+        }
+
+        .cot thead .grp .patr {
+            background: var(--band);
+            color: var(--band-ink);
+            text-align: center;
+            font-weight: normal;
+            padding: 1px 4px;
+        }
+
+        .cot thead .hdr th {
+            background: var(--band);
+            color: var(--band-ink);
+            text-align: center;
+            font-weight: normal;
+            padding: 2px 4px;
+            border-right: 1px solid #fff;
+        }
+
+        .cot thead .hdr th:last-child {
+            border-right: none;
+        }
+
+        .cot tbody {
+            border: 1px solid var(--line);
+        }
+
+        .cot tbody td {
+            border-left: 1px solid var(--line);
+            padding: 0 4px;
+            height: 13.5px;
+            line-height: 13.5px;
+        }
+
+        .cot tbody td:first-child {
+            border-left: none;
+        }
+
+        .cot .lib {
+            text-align: left;
+        }
+
+        .cot .v {
+            text-align: right;
+        }
+
+        .cot .totalrow td {
+            font-weight: bold;
+        }
+
+        .cot .filler td {
+            height: 230px;
+        }
+
+        /* ---- trois pavés du bas ---- */
+        .bottom {
+            margin-top: 8px;
+        }
+
+        .bottom>tbody>tr>td {
+            vertical-align: top;
+        }
+
+        .bottom .c-leave {
+            width: 27%;
+            padding-right: 14px;
+        }
+
+        .bottom .c-total {
+            width: 30%;
+            padding-right: 14px;
+        }
+
+        .leave th,
+        .leave td {
+            border: 1px solid var(--line);
+            padding: 1px 5px;
+            height: 15px;
+        }
+
+        .leave th {
+            background: var(--band);
+            color: var(--band-ink);
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .leave .rowlabel {
+            font-weight: normal;
+            text-align: left;
+            width: 28%;
+        }
+
+        .leave td.v {
+            text-align: right;
+        }
+
+        .recap th,
+        .recap td {
+            border: 1px solid var(--line);
+            padding: 1px 5px;
+        }
+
+        .recap th {
+            background: var(--band);
+            color: var(--band-ink);
+            font-weight: normal;
+            text-align: center;
+        }
+
+        .recap td.v {
+            text-align: right;
+            width: 40%;
+        }
+
+        /* ---- net avant impôt / impôt sur le revenu (absent en 2018) ---- */
+        .net-avant-impot {
+            margin-top: 6px;
+        }
+
+        .net-avant-impot td {
+            font-weight: bold;
+            font-style: italic;
+            font-size: 11.46pt;
+        }
+
+        .net-avant-impot td.v {
+            text-align: right;
+        }
+
+        .eir-note {
+            display: flex;
+            justify-content: space-between;
+            font-style: italic;
+            font-size: var(--fs-sm);
+            color: var(--band);
+        }
+
+        .impot {
+            margin-top: 2px;
+        }
+
+        .impot th,
+        .impot td {
+            border: 1px solid var(--line);
+            padding: 1px 5px;
+        }
+
+        .impot th {
+            background: var(--band);
+            color: var(--band-ink);
+            font-weight: normal;
+            text-align: center;
+        }
+
+        .impot td.lib {
+            text-align: left;
+        }
+
+        .impot td.v {
+            text-align: right;
+        }
+
+        .pay td {
+            padding: 1px 5px;
+            height: 15px;
+        }
+
+        .pay .netlab {
+            border: 1px solid var(--line);
+            background: var(--band);
+            color: var(--band-ink);
+            font-weight: normal;
+            text-align: center;
+            width: 42%;
+        }
+
+        .pay .netval {
+            border: 1px solid var(--line);
+            font-weight: bold;
+            text-align: right;
+        }
+
+        .pay .pk {
+            width: 42%;
+        }
+
+        .pay .pv {
+            text-align: right;
+        }
+
+        /* ---- bandeau de cumuls ---- */
+        .cumuls {
+            margin-top: 8px;
+        }
+
+        .cumuls th,
+        .cumuls td {
+            border: 1px solid var(--line);
+            padding: 2px 5px;
+            height: 16px;
+            text-align: right;
+        }
+
+        .cumuls th {
+            background: var(--band);
+            color: var(--band-ink);
+            font-weight: bold;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .cumuls .rowlabel {
+            background: var(--band);
+            color: var(--band-ink);
+            font-weight: bold;
+            text-align: left;
+            width: 8%;
+        }
+
+        .footer-notes {
+            margin-top: 6px;
+            text-align: center;
+        }
+
+        /* ---- chrome docscope (identique aux autres vues) ---- */
+        #anomalies {
+            margin: 1rem;
+            border: 1px solid #e0b400;
+            background: #fff8e1;
+            border-radius: 6px;
+            padding: 0.75rem 1rem;
+            font-size: 0.9rem;
+            font-family: sans-serif;
+        }
+
+        #anomalies h2 {
+            font-size: 0.95rem;
+            margin: 0 0 0.4rem;
+            color: #8a6d00;
+        }
+
+        #anomalies ul {
+            margin: 0;
+            padding-left: 1.2rem;
+        }
+
+        #anomalies.ok {
+            border-color: #2e7d32;
+            background: #edf7ed;
+        }
+
+        #anomalies.ok h2 {
+            color: #2e7d32;
+        }
+
+        #vue-error {
+            color: #b00020;
+            margin: 1rem;
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="anomalies" hidden></div>
+    <div id="vue-error" hidden></div>
+    <div id="bulletin-mount"></div>
+
+    <script>
+        const documentId = new URLSearchParams(location.search).get("id");
+        const vueError = document.getElementById("vue-error");
+        const anomaliesBox = document.getElementById("anomalies");
+        const bulletinMount = document.getElementById("bulletin-mount");
+
+        // petit échappement pour le bandeau d'anomalies (texte serveur)
+        const escapeHtml = (s) => String(s)
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+        const afficherAnomalies = (anomalies) => {
+            anomaliesBox.hidden = false;
+            if (anomalies.length === 0) {
+                anomaliesBox.className = "ok";
+                anomaliesBox.innerHTML = "<h2>Aucune anomalie détectée</h2>";
+                return;
+            }
+            anomaliesBox.className = "";
+            const items = anomalies.map((a) => `<li>${escapeHtml(a)}</li>`).join("");
+            anomaliesBox.innerHTML =
+                `<h2>${anomalies.length} anomalie(s) détectée(s)</h2><ul>${items}</ul>`;
+        };
+
+        // ---- couche de rendu du bulletin mosica, aucune donnée en dur ----
+        const esc = s => (s == null ? "" : String(s))
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const nl2br = s => esc(s).replace(/\n/g, "<br>");
+        const cell = v => (v == null || v === "") ? "" : esc(v);
+        // n'affiche "<étiquette> : <valeur>" que si la valeur existe
+        const kv = (k, v) => (v == null || v === "")
+            ? "" : `<span class="k">${esc(k)}</span> : ${esc(v)}`;
+
+        function renderLines(lines) {
+            return lines.map(l => `
+      <tr class="${l.isTotal ? "totalrow" : ""}">
+        <td class="lib">${nl2br(l.label)}</td>
+        <td class="v">${cell(l.base)}</td>
+        <td class="v">${cell(l.taux)}</td>
+        <td class="v">${cell(l.gain)}</td>
+        <td class="v">${cell(l.retenue)}</td>
+        <td class="v">${cell(l.tauxPatr)}</td>
+        <td class="v">${cell(l.partPatr)}</td>
+      </tr>`).join("");
+        }
+
+        // Ligne du bloc contrat : deux paires étiquette/valeur par rangée.
+        function contractRow(k1, v1, k2, v2) {
+            return `<tr>
+            <td class="lab">${k1 ? esc(k1) + " :" : ""}</td>
+            <td>${cell(v1)}</td>
+            <td class="lab2">${k2 ? esc(k2) + " :" : ""}</td>
+            <td>${cell(v2)}</td>
+          </tr>`;
+        }
+
+        function render(d) {
+            const emp = d.employer, u = d.urssaf, e = d.employee, c = d.contract,
+                p = d.period, pay = d.payment, cu = d.cumuls, m = d.meta;
+
+            const periodTxt = (p.from || p.to)
+                ? `Période de paye : ${esc(p.from)} au ${esc(p.to)}` : "";
+
+            return `
+    <div class="sheet">
+
+      <!-- ============ BANDEAU DE TITRE ============ -->
+      <table class="titlebar">
+        <tr>
+          <td>${esc(m.docTitle)}</td>
+          <td class="num">${m.docNumber ? "N° " + esc(m.docNumber) : ""}</td>
+          <td class="r">${periodTxt}</td>
+        </tr>
+      </table>
+
+      <!-- ============ IDENTITÉS ============ -->
+      <table class="parties">
+        <tr>
+          <td>
+            <div class="b">${esc(emp.name)}</div>
+            ${emp.addressLines.map(a => `<div>${esc(a)}</div>`).join("")}
+            <div class="legal">
+              ${kv("SIRET", emp.siret)}<span class="gap"></span>${kv("NAF", emp.naf)}
+            </div>
+            <div class="urssaf">
+              <div class="b">${esc(u.name)}</div>
+              ${u.addressLines.map(a => `<div>${esc(a)}</div>`).join("")}
+            </div>
+          </td>
+          <td class="who">
+            <div class="b">
+              ${e.civility ? esc(e.civility) + "&nbsp;&nbsp;" : ""}${esc(e.name)}
+            </div>
+            ${e.addressLines.map(a => `<div>${esc(a)}</div>`).join("")}
+            <div class="contract-box" style="margin-top:26px">
+              <table>
+                ${contractRow("Date d'entrée", c.dateEntree, "", "")}
+                ${contractRow("Date ancienneté", c.dateAnciennete, "", "")}
+                ${contractRow("Nature d'emploi", c.natureEmploi, "", "")}
+                ${contractRow("Statut catégoriel", c.statutCategoriel, "Position", c.position)}
+                ${contractRow("", "", "Niveau", c.niveau)}
+                ${contractRow("N° S.S.", c.numSS, "Echelon", c.echelon)}
+                ${contractRow("Service", c.service, "Coefficient", c.coefficient)}
+              </table>
+            </div>
+          </td>
+        </tr>
+      </table>
+
+      <div class="ccn">${kv("CCN", c.ccn)}</div>
+
+      <!-- ============ RUBRIQUES ============ -->
+      <table class="cot">
+        <colgroup>
+          <col class="c-lib"><col class="c-v"><col class="c-v"><col class="c-v">
+          <col class="c-v"><col class="c-vp"><col class="c-vp">
+        </colgroup>
+        <thead>
+          <tr class="grp">
+            <th colspan="5"></th>
+            <th class="patr" colspan="2">Part patronale</th>
+          </tr>
+          <tr class="hdr">
+            <th>Libellé</th>
+            <th>Base</th>
+            <th>Taux</th>
+            <th>Gain</th>
+            <th>Retenue</th>
+            <th>Taux</th>
+            <th>Montant</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${renderLines(d.lines)}
+          <tr class="filler">
+            <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+          </tr>
+        </tbody>
+      </table>
+
+      ${d.recap.netAvantImpot ? `
+      <!-- ============ NET AVANT IMPÔT / IMPÔT SUR LE REVENU (absent 2018) ============ -->
+      <table class="net-avant-impot">
+        <tr>
+          <td>Net à payer avant impôt sur le revenu</td>
+          <td class="v">${cell(d.recap.netAvantImpot)}</td>
+        </tr>
+      </table>
+      ${d.recap.evolutionRemuneration ? `
+      <div class="eir-note">
+        <span>Dont évolution de la rémunération liée à la suppression des cotisations salariales chômage et maladie</span>
+        <span>${cell(d.recap.evolutionRemuneration)}</span>
+      </div>` : ""}
+      ${d.impot.libelle ? `
+      <table class="impot">
+        <thead>
+          <tr>
+            <th>Impôt sur le revenu</th>
+            <th>Base</th>
+            <th>Taux personnalisé</th>
+            <th>Montant</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="lib">${esc(d.impot.libelle)}</td>
+            <td class="v">${cell(d.impot.base)}</td>
+            <td class="v">${cell(d.impot.taux)}</td>
+            <td class="v">${cell(d.impot.montant)}</td>
+          </tr>
+        </tbody>
+      </table>` : ""}` : ""}
+
+      <!-- ============ CONGÉS / TOTAL / PAIEMENT ============ -->
+      <table class="bottom">
+        <tr>
+          <td class="c-leave">
+            <table class="leave">
+              <tr>
+                <th>Congés</th>
+                <th>N-1</th>
+                <th>N</th>
+                ${d.leave.hasAnc ? '<th>Anc.</th>' : ""}
+                <th>${esc(d.leave.rttLabel)}</th>
+              </tr>
+              ${d.leave.rows.map(r => `
+              <tr>
+                <td class="rowlabel">${esc(r.label)}</td>
+                <td class="v">${cell(r.n1)}</td>
+                <td class="v">${cell(r.n)}</td>
+                ${d.leave.hasAnc ? `<td class="v">${cell(r.anc)}</td>` : ""}
+                <td class="v">${cell(r.rtt)}</td>
+              </tr>`).join("")}
+            </table>
+          </td>
+          <td class="c-total">
+            <table class="recap">
+              <tr>
+                <th colspan="2">Total</th>
+              </tr>
+              <tr>
+                <td>Allegement cotisations :</td>
+                <td class="v">${cell(d.recap.allegement)}</td>
+              </tr>
+              <tr>
+                <td>Coût employeur :</td>
+                <td class="v">${cell(d.recap.employerCost)}</td>
+              </tr>
+            </table>
+          </td>
+          <td>
+            <table class="pay">
+              <tr>
+                <td class="netlab">Net à payer :</td>
+                <td class="netval">
+                  ${cell(d.netToPay.amount)}${d.netToPay.currency ? " " + esc(d.netToPay.currency) : ""}
+                </td>
+              </tr>
+              <tr>
+                <td class="pk">Paiement par :</td>
+                <td class="pv">${cell(pay.mode)}</td>
+              </tr>
+              <tr>
+                <td class="pk">Date de paiement :</td>
+                <td class="pv">${cell(pay.date)}</td>
+              </tr>
+              <tr>
+                <td class="pk">Banque :</td>
+                <td class="pv">${cell(pay.banque)}</td>
+              </tr>
+              <tr>
+                <td class="pk">IBAN :</td>
+                <td class="pv">${cell(pay.iban)}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <!-- ============ CUMULS ============ -->
+      <table class="cumuls">
+        <thead>
+          <tr>
+            <th class="rowlabel"></th>
+            <th>Plafond S.S.</th>
+            <th>Heures trav.</th>
+            <th>Jours trav.</th>
+            <th>Salaire brut</th>
+            <th>Tranche A</th>
+            <th>Tranche B</th>
+            <th>Net imposable</th>
+            <th>Charges sal.</th>
+            <th>Charges pat.</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${[["Mois", cu.mois], ["Année", cu.annee]].map(([label, row]) => `
+          <tr>
+            <td class="rowlabel">${esc(label)}</td>
+            <td>${cell(row.plafondSS)}</td>
+            <td>${cell(row.heuresTrav)}</td>
+            <td>${cell(row.joursTrav)}</td>
+            <td>${cell(row.salaireBrut)}</td>
+            <td>${cell(row.trancheA)}</td>
+            <td>${cell(row.trancheB)}</td>
+            <td>${cell(row.netImposable)}</td>
+            <td>${cell(row.chargesSal)}</td>
+            <td>${cell(row.chargesPat)}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+
+      <div class="footer-notes">
+        ${d.footerNotes.map(n => `<div>${esc(n)}</div>`).join("")}
+      </div>
+
+    </div>`;
+        }
+
+        // Récupère le payslip structuré depuis le back et rend le bulletin.
+        fetch(`http://localhost:8000/documents/${documentId}/payslip`)
+            .then(async (response) => {
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail);
+                return data;
+            })
+            .then((data) => {
+                afficherAnomalies(data.anomalies || []);
+                bulletinMount.innerHTML = render(data);
+            })
+            .catch((err) => {
+                vueError.hidden = false;
+                vueError.textContent = `Impossible de charger la vue graphique : ${err.message}`;
+            });
+    </script>
+</body>
+
+</html>

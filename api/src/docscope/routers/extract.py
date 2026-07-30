@@ -11,8 +11,10 @@ from docscope.services.extraction import (
     extract_apside,
     extract_delvaux,
     extract_mosica,
+    extract_partena,
     extract_pdf_text,
     extract_ricoh,
+    extract_sdworx,
     extract_sitti,
     extract_ucm,
 )
@@ -29,6 +31,8 @@ EXTRACTORS = {
     "mosica": lambda content: extract_mosica(extract_pdf_text(content)),
     "ricoh": lambda content: extract_ricoh(extract_pdf_text(content)),
     "sitti": lambda content: extract_sitti(extract_pdf_text(content)),
+    "partena": lambda content: extract_partena(extract_pdf_text(content)),
+    "sdworx": lambda content: extract_sdworx(extract_pdf_text(content)),
 }
 
 

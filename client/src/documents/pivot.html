@@ -163,11 +163,12 @@
         // group instead of being its own column. Each template only ever
         // contributes its own attribute names to a given pivot (grouped by
         // template beforehand), so listing every template's names here -
-        // apside first, then ricoh - doesn't cross-interfere. Unknown
-        // attributes (a future template's own naming) sort after all of
-        // these, in first-seen order.
+        // apside first, then ricoh, then sitti - doesn't cross-interfere.
+        // Unknown attributes (a future template's own naming) sort after
+        // all of these, in first-seen order.
         const ATTR_ORDER = [
-            "Nombre", "Base", "Taux (sal)", "Gain (sal)", "Retenue (sal)", "Taux (patr)", "Retenue (patr)", "Détail",
+            "Nombre", "Base", "Taux (sal)", "Gain (sal)", "Retenue (sal)", "Taux (patr)",
+            "Retenue + (patr)", "Retenue - (patr)", "Retenue (patr)", "Détail",
             "Nombre ou base", "Taux salarial", "Taux", "A payer", "A déduire", "Retenue", "Part patr",
         ];
         const attrRank = (attr) => {
